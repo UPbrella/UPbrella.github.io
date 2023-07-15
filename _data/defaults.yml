@@ -1,4 +1,4 @@
 home:
-  heading: "Your awesome heading"
-  subheading: "Your awesome subheading"
-  banner: "Your image url"
+  heading: 'Upbrella 기술 블로그'
+  subheading: '서비스를 구축하면서 발생한 이슈와 해결과정을 기술하는 블로그입니다.'
+  banner: 'Your image url'
