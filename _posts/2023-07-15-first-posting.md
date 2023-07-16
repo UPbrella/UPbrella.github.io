@@ -1,16 +1,16 @@
 ---
 title: 포스팅 테스트 입니다.
 layout: post
-author: chanwoo
+author: 신찬우
 subtitle: '소제목: ㅎㅎㅎ'
 categories:
-  - 프론트엔드
-  - 백엔드
-  - 기획
-  - 디자인
+- 프론트엔드
+- 백엔드
+- 기획
+- 디자인
 tags:
-  - typescript
-  - react
+- typescript
+- react
 ---
 
 마크 다운 테스트

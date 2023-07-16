@@ -24,12 +24,17 @@
     >
 
     {% if page.author %}
+    <div style="margin-bottom: 15px;">작성자: {{page.author}}</div>
+    {% endif %}
+
+
+    <!-- {% if page.author %}
     {% for author in site.data.authors %}
       {% if page.author == author.name %}
       <div style="margin-bottom: 15px;">작성자: {{author.koname}}</div>
       {% endif %}
     {% endfor %}
-    {% endif %}
+    {% endif %} -->
   
   </p>
 
