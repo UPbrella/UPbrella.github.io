@@ -196,7 +196,7 @@ storeMeta = fixtureMonkey.giveMeBuilder(StoreMeta.class)
 
 String의 경우도 읽을 수 없는 문자가 삽입되어 보기 좋지 않았습니다.
 
-<p align="center"><img src="resources/2023-08-09-01.png" "></p>
+![2023-08-09-01]("/resources/2023-08-09-01.png"){: .align-center}
 
 #### 0.3. 기본 객체 빌더 정의하기
 
