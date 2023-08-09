@@ -27,7 +27,7 @@ tags:
 ### 1. 단순 반복의 객체 생성 코드, 가독성 저하
 
 
-```agsl
+```java
 @BeforeEach
     void setUp() {
         rentUmbrellaByUserRequest = RentUmbrellaByUserRequest.builder()
@@ -79,7 +79,7 @@ tags:
 객체 생성이 반복되다보니 자연스럽게 페이징 API와 같이 목록을 조회하는 경우 풍부한 데이터를 넣기 어려워졌습니다. 
 아래는 협업 지점 목록을 조회하는 API에서 객체를 생성하던 코드입니다.
 
-```agsl
+```java
 StoreMeta storeIn = StoreMeta.builder()
                     .id(1)
                     .name("모티브 카페 신촌 지점")
@@ -114,7 +114,7 @@ StoreMeta storeIn = StoreMeta.builder()
 
 간단한 예를 들면, 두 숫자를 더할 때 오버플로우가 발생하는 엣지 케이스를 생각해보겠습니다.
 
-```agsl
+```java
     @Test
     @DisplayName("테스트")
     void test() {
@@ -155,7 +155,7 @@ StoreMeta storeIn = StoreMeta.builder()
 
 #### 0.1. 의존성 추가
 
-```agsl
+```
 testImplementation("com.navercorp.fixturemonkey:fixture-monkey-starter:0.5.0")
 ```
 
@@ -164,7 +164,7 @@ testImplementation("com.navercorp.fixturemonkey:fixture-monkey-starter:0.5.0")
 Upbrella는 객체 생성을 Lombok을 사용한 Builder 패턴을 이용해서 처리하고 있습니다.
 Fixture Monkey가 Lombok, Builder 환경에서도 잘 작동하도록 하기 위해서는 다음과 같이 설정해야합니다.
 
-```agsl
+```java
 private static final FixtureMonkey fixtureMonkey = FixtureMonkey.builder()
             .objectIntrospector(BuilderArbitraryIntrospector.INSTANCE)
             .defaultNotNull(true)
@@ -178,7 +178,7 @@ Builder가 아닌 다른 패턴을 사용하는 경우에도 objectIntrospector 
 여기까지만 설정해도 fixtureMonkey를 사용할 수 있습니다.
 fixtureMonkey를 사용해서 객체를 생성하는 방법은 다음과 같습니다.
 
-```agsl
+```java
 // 기본 객체 생성
 StoreMeta storeMeta = fixtureMonkey.giveMeOne(StoreMeta.class);
 
@@ -202,7 +202,7 @@ String의 경우도 읽을 수 없는 문자가 삽입되어 보기 좋지 않�
 
 따라서, 이러한 문제를 해결하기 위해서는 다음과 같이 제약조건을 지정해주어야합니다.
 
-```agsl
+```java
 // 적절한 범위의 Long 값 생성
 public static long buildLong() {
 
@@ -223,7 +223,7 @@ public static ArbitraryBuilder<UmbrellaRequest> builderUmbrellaRequest() {
 
 마지막으로, String의 의미없는 값을 RestDocs에서 의미있는 값에서 골라서 가져오도록, 다음과 같이 정의했습니다.
 
-```agsl
+```java
   private static String[] cafeList = {"투썸", "스타벅스", "이디야", "커피빈", "엔젤리너스", "할리스", "탐앤탐스", "커피마마", "커피에반하다", "커피나무"};
   
   private static String pickRandomString(String[] names) {
@@ -256,7 +256,7 @@ public static ArbitraryBuilder<UmbrellaRequest> builderUmbrellaRequest() {
 
 #### Fixture Monkey를 도입하기 전
 
-```agsl
+```java
 @BeforeEach
         void setUp() {
             storeMeta = StoreMeta.builder()
@@ -284,7 +284,7 @@ public static ArbitraryBuilder<UmbrellaRequest> builderUmbrellaRequest() {
 
 #### Fixture Monkey를 도입한 후
 
-```agsl
+```java
 @BeforeEach
         void setUp() {
 
@@ -312,7 +312,7 @@ public static ArbitraryBuilder<UmbrellaRequest> builderUmbrellaRequest() {
 
 #### FixtureMonkey와 RestDocs를 활용한 HTTP Response 예시
 
-```agsl
+```json
 HTTP/1.1 200 OK
 Content-Type: application/json
 Content-Length: 1414
