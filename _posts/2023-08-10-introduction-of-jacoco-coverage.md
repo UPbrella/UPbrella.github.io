@@ -8,6 +8,7 @@ categories:
 tags:
 - test
 - Jacoco
+published: true
 ---
 
 안녕하세요,
