@@ -111,7 +111,7 @@ jacoco {
 
 build.gradle에 의존성을 추가해줍니다.
 
-### 2.4. Jacoco 설정
+### 2.3. Jacoco 설정
 
 jacoco에서 테스트 리포트를 작성하기 위해서는 `jacocoTestReport`라는 Task를 동작시켜야합니다.
 
@@ -211,7 +211,7 @@ counter에서는 비율을 계산하기 위한 단위를 선택할 수 있습니
 lombok.addLombokGeneratedAnnotation = true
 ```
 
-### 2.5. Jacoco 리포트 확인하기
+### 2.4. Jacoco 리포트 확인하기
 
 이제 테스트를 실행하고, 리포트를 확인해보겠습니다.
 `Test` 태스크를 실행시키면, 커버리지 최소 비율을 확인하고, 그 이상이라면 build/report/jacoco/index.html에 리포트를 작성합니다.
