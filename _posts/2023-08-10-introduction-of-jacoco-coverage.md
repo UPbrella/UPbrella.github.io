@@ -214,10 +214,14 @@ lombok.addLombokGeneratedAnnotation = true
 ### 2.4. Jacoco 리포트 확인하기
 
 이제 테스트를 실행하고, 리포트를 확인해보겠습니다.
-`Test` 태스크를 실행시키면, 커버리지 최소 비율을 확인하고, 그 이상이라면 build/report/jacoco/index.html에 리포트를 작성합니다.
+`Test` 태스크를 실행시키면, 커버리지 최소 비율을 확인하고, 그 이상이라면 `build/report/jacoco/index.html`에 리포트를 작성합니다.
 경로 변경도 물론 옵션에서 가능합니다.
 
-![2023-08-10-01]("/resources/2023-08-10-01.png"){: .align-center}
+![2023-08-10-01]("/resources/2023-08-10-01.png"){:.align-center}
+
+<img data-action="zoom" src='{{ "/resources/2023-08-10-01.png" | relative_url }}' alt='absolute'>
+
+![Image Alt 텍스트]("/resources/2023-08-10-01.png")
 
 위 이미지는 업브렐라의 커버리지 리포트 예시입니다. 업브렐라 백엔드의 현재 프로덕션 코드는 4000 라인, 테스트 코드는 6000 라인입니다.
 
