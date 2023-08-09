@@ -1,5 +1,5 @@
 ---
-title: 내 테스트 코드는 몇 점짜리?, Jacoco를 통한 커버리지 관리
+title: 내 테스트 코드는 몇 점짜리? Jacoco를 통한 커버리지 관리
 layout: post
 author: 남권우
 subtitle: 'Jacoco 코드 커버리지 측정 및 관리'
@@ -217,18 +217,14 @@ lombok.addLombokGeneratedAnnotation = true
 `Test` 태스크를 실행시키면, 커버리지 최소 비율을 확인하고, 그 이상이라면 `build/report/jacoco/index.html`에 리포트를 작성합니다.
 경로 변경도 물론 옵션에서 가능합니다.
 
-![2023-08-10-01]("/resources/2023-08-10-01.png"){:.align-center}
-
 <img data-action="zoom" src='{{ "/resources/2023-08-10-01.png" | relative_url }}' alt='absolute'>
-
-![Image Alt 텍스트]("/resources/2023-08-10-01.png")
 
 위 이미지는 업브렐라의 커버리지 리포트 예시입니다. 업브렐라 백엔드의 현재 프로덕션 코드는 4000 라인, 테스트 코드는 6000 라인입니다.
 
 
 커버리지 리포트에서 클래스, 메서드를 클릭하여 메서드 별 커버리지와 실제 커버되지 않는 프로덕션 코드를 아래처럼 확인할 수 있습니다.
 
-![2023-08-10-02]("/resources/2023-08-10-02.png"){: .align-center}
+<img data-action="zoom" src='{{ "/resources/2023-08-10-02.png" | relative_url }}' alt='absolute'>
 
 코드 커버리지 툴을 사용하니 좋았던 점은, **테스트에서 커버되지 않는 코드를 바로 확인할 수 있다**는 점입니다.
 작성을 깜빡했거나, 분기처리에 대한 경우의 수를 고려하지 못한 경우 커버리지 리포트에서 쉽게 확인하여 더 나은 테스트 코드를 작성할 수 있도록 도와줍니다.

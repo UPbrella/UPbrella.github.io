@@ -196,7 +196,7 @@ storeMeta = fixtureMonkey.giveMeBuilder(StoreMeta.class)
 
 String의 경우도 읽을 수 없는 문자가 삽입되어 보기 좋지 않았습니다.
 
-![2023-08-09-01]("/resources/2023-08-09-01.png"){: .align-center}
+<img data-action="zoom" src='{{ "/resources/2023-08-09-01.png" | relative_url }}' alt='absolute'>
 
 #### 0.3. 기본 객체 빌더 정의하기
 
