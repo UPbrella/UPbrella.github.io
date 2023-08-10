@@ -70,8 +70,8 @@ published: true
 
 ```java
 public class Calculator {
-    public int add(int a, int b) {
-        return a + b;
+    public int multiply(int a, int b) {
+        return a * b;
     }
 }
 ```
@@ -83,13 +83,13 @@ public class CalculatorTest {
     @Test
     public void add() {
         Calculator calculator = new Calculator();
-        int result = calculator.add(1, 2);
-        assertEquals(3, result);
+        int result = calculator.multiply(1, 1);
+        assertEquals(1, result);
     }
 }
 ```
-위 테스트 코드는 통과할 것이고, 커버리지 100%를 달성하겠지만, 위 코드에서 `a + b`를 `a * b`로 변경해도 여전히 동작할 것입니다.
-그러나 테스트에 대입되는 변수를 다양하게 작성했더라면 `+`를 `*`로 변경했을 때 테스트는 통과하지 못했을 것입니다.
+위 테스트 코드는 통과할 것이고, 커버리지 100%를 달성하겠지만, 위 코드에서 `a * b`를 `a ** b`로 변경해도 여전히 동작할 것입니다.
+그러나 테스트에 대입되는 변수를 다양하게 작성했더라면 `*`를 `**`로 변경했을 때 테스트는 통과하지 못했을 것입니다.
 
 즉, 높은 커버리지 비율을 유지하는 것과는 별도로 **좋은 테스트 코드를 작성**하는 것이 중요합니다.
 
