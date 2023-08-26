@@ -15,7 +15,7 @@ published: true
 저는 업브렐라에서 백엔드 개발을 담당하고 있습니다.
 이번 글에서는 분산 서버 환경에서 세션 로그인을 구현하는 방법에 대해 알아보겠습니다.
 
-# 1. 문제 정의
+## 1. 문제 정의
 
 업브렐라 서비스의 특성 상 비가 올 경우 사용자가 급증하기 때문에 분산 서버 환경을 구성하고 있습니다. 하지만 분산 서버 환경에서 세션 로그인 방법을 사용한다면 한 가지 문제점을 맞이하게 됩니다.
 
@@ -25,7 +25,7 @@ published: true
 
 Spring Application #2 가 세션 #3의 요청을 받는 상황을 상상해보면, 세션 데이터가 Spring Application #1의 메모리에 저장되어 있기 때문에, 애플리케이션이 세션 데이터를 읽을수가 없게 됩니다.  
 
-# 2. Session Storage
+## 2. Session Storage
 
 이 문제를 해결하기 위해서는 Redis와 같은 일종의 공유 세션 스토리지를 구현해야 합니다.
 
@@ -34,11 +34,11 @@ Spring Application #2 가 세션 #3의 요청을 받는 상황을 상상해보�
 
 이렇게 공유 세션 저장소를 사용하게 된다면, 분산 서버 환경에서의 문제점을 해결할 수 있습니다. 
 
-# 3. Spring Session Data Redis
+## 3. Spring Session Data Redis
 
 이제 Spring Redis Session 을 적용해서 분산 서버 환경에서의 로그인 문제를 해결하는 방법에 대해 알아보겠습니다.
 
-## 3-1. Redis 설치
+### 3-1. Redis 설치
 
 Redis를 이용할 서버에 접속해 다음 과정을 거칩니다.
 
@@ -63,7 +63,7 @@ bind 127.0.0.1 ::1
 
 위의 주소를 spring 서버 주소로 변경합니다. (여러개의 IP 주소를 허용하고 싶은 경우 IP 주소 사이에 공백을 추가합니다.
 
-## 3-2. build.gralde 설정
+### 3-2. build.gralde 설정
 
 ```
 		// Spring Data Redis
@@ -74,7 +74,7 @@ bind 127.0.0.1 ::1
 
 build.gradle 에 다음과 같이 의존성을 추가해줍니다.
 
-## 3-3. Redis Session 설정
+### 3-3. Redis Session 설정
 
 서버에서 사용하고 있는 레디스에 접근하기 위해 application.yml 파일에 설정을 추가합니다.
 
@@ -106,7 +106,7 @@ public class HttpSessionConfig {
 session.setAttribute("key", "value");
 ```
 
-## 3-4. Redis Session 테스트
+### 3-4. Redis Session 테스트
 
 위의 설정이 잘 적용되었는지 직접 확인해보겠습니다.
 
