@@ -3,6 +3,7 @@ title: 기획자와 디자이너를 위한 마크다운 간단 문법
 layout: post
 author: 임동현
 subtitle: '마크다운 간단 문법'
+date: 2021-07-16 00:00:00 +0900
 categories:
 - markdown
 tags:

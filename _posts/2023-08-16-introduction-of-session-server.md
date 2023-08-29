@@ -3,6 +3,7 @@ title: 분산 서버 환경에서 세션 로그인
 layout: post
 author: 임동현
 subtitle: 'Redis를 이용한 세션 서버'
+date: 2021-08-16 00:00:00 +0900
 categories:
 - Login
 tags:

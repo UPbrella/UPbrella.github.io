@@ -3,6 +3,7 @@ title: 테스트 코드 작성 반복 노동으로부터 해방, Fixture Monkey
 layout: post
 author: 남권우
 subtitle: 'Fixture Monkey 도입하기'
+date: 2021-08-09 00:00:00 +0900
 categories:
 - Test
 tags:

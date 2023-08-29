@@ -3,6 +3,7 @@ title: 컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기
 layout: post
 author: 남권우
 subtitle: '컨테이너 오케스트레이션 서비스 - AWS ECR, ECS 도입기'
+date: 2021-08-19 00:00:00 +0900
 categories:
 - Infrastructure
 tags:

@@ -3,6 +3,7 @@ title: 롤링 업데이트, AWS ECR, ECS로 쉽게
 layout: post
 author: 남권우
 subtitle: 'AWS ECR, ECS로 쉽게 CI/CD 구성하기'
+date: 2021-08-20 00:00:00 +0900
 categories:
 - Infrastructure
 tags:
