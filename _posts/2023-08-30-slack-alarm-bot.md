@@ -1,5 +1,5 @@
 ---
-title: AWS - 슬랙 배포 알림 파이프라인 구축하기
+title: AWS 슬랙 배포 알림 파이프라인 구축하기
 layout: post
 author: 남권우
 subtitle: '슬랙으로 배포 완료 알림 보내기'
@@ -16,7 +16,7 @@ published: true
 안녕하세요,
 업브렐라 팀의 백엔드 남권우입니다.
 
-이번 포스팅에서는 [컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기](https://upbrella.github.io/infrastructure/2023/08/19/ECR-ECS-Infra.html)에서 구축한 인프라에 슬랙 봇을 도입하여 알림 파이프라인을 구축한 이야기입니다.
+이번 포스팅에서는 [컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기](https://upbrella.github.io/infrastructure/2023/08/19/ECR-ECS-Infra.html)에서 구축한 인프라에 슬랙 알 을 도입하여 알림 파이프라인을 구축한 이야기입니다.
 
 ## 1. 문제 정의
 
@@ -98,5 +98,5 @@ AWS EventBridge > 규칙 > 규칙 생성을 통해 규칙을 생성합니다.
 
 ## 4. 마무리
 
-이렇게 간단하게 AWS의 배포 알림 시스템을 구축할 수 있습니다.봇
+이렇게 간단하게 AWS의 배포 알림 시스템을 구축할 수 있습니다.
 다음 포스팅에서는 서비스와 연동하여 주요 기능 알람을 Slack으로 보낼 수 있도록 슬랙 봇을 추가해보겠습니다.
