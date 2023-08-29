@@ -169,7 +169,7 @@ banner:
  volume: 0               # Video volume (100% is 1.0)
  start_at: 0             # Video start time
  image: "/assets/images/banners/home.jpeg"             # Image banner source
- opacity: 0.7            # Banner opacity (100% is 1.0)
+ opacity: 0.8            # Banner opacity (100% is 1.0)
  background: "rgba(0, 0, 0, 0.8)"  # Banner background (Could be a image)
  height: "320px"         # Banner default height
  min_height: null        # Banner minimum height
