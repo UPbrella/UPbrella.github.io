@@ -15,7 +15,7 @@ published: true
 안녕하세요,
 업브렐라 팀의 백엔드 남권우입니다.
 
-이번 포스팅에서는 [컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기](https://upbrella.github.io/infrastructure/2023/08/19/ECR-ECS-Infra.html)에서 구축한 인프라를 바탕으로 CI/CD 환경을 구축한 이야기를 소개하고자 합니다.
+이번 포스팅에서는 [컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기](https://upbrella.github.io/infrastructure/2023/08/18/ECR-ECS-Infra.html)에서 구축한 인프라를 바탕으로 CI/CD 환경을 구축한 이야기를 소개하고자 합니다.
 
 ## 1. 문제 정의
 
