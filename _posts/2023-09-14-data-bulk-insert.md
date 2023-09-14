@@ -1,3 +1,15 @@
+---
+title: 대용량 데이터 삽입
+layout: post
+author: 임동현
+subtitle: 'bulk insert'
+date: 2023-09-14 00:00:00 +0900
+categories:
+- MySQL
+tags:
+- MySQL
+---
+
 ## 1. 문제 정의
 
 데이터 베이스 성능을 개선하는 것은 품질 좋은 서버를 유지하기 위해서 필수적입니다.
