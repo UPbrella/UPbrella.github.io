@@ -3,7 +3,7 @@ title: JPA Repository는 Entity만을 조회해야할까?
 layout: post
 author: 임동현
 subtitle: 'jpa repository'
-date: 2023-09-14 00:00:00 +0900
+date: 2023-09-20 00:00:00 +0900
 categories:
 - JPA
 tags:

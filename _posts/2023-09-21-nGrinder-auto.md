@@ -3,7 +3,7 @@ title: nGrinder 자동화
 layout: post
 author: 임동현
 subtitle: 'nGrinder 자동화'
-date: 2023-09-14 00:00:00 +0900
+date: 2023-09-21 00:00:00 +0900
 categories:
 - nGrinder
 tags:
