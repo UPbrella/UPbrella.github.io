@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="google-translate-customization" content="108d9124921d80c3-80e20d618ff053c8-g4f02ec6f3dba68b7-c">
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>협업지점 조회 성능 개선</title>
+<meta name="generator" content="Jekyll v4.3.2">
+<meta property="og:title" content="협업지점 조회 성능 개선">
+<meta name="author" content="임동현">
+<meta property="og:locale" content="ko">
+<meta name="description" content="1. 문제 정의">
+<meta property="og:description" content="1. 문제 정의">
+<link rel="canonical" href="https://upbrella.github.io/jekyll-theme-yat/refactor/2023/10/14/store-api.html">
+<meta property="og:url" content="https://upbrella.github.io/jekyll-theme-yat/refactor/2023/10/14/store-api.html">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2023-10-14T15:00:00+00:00">
+<meta name="twitter:card" content="summary">
+<meta property="twitter:title" content="협업지점 조회 성능 개선">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"임동현"},"dateModified":"2023-10-14T15:00:00+00:00","datePublished":"2023-10-14T15:00:00+00:00","description":"1. 문제 정의","headline":"협업지점 조회 성능 개선","mainEntityOfPage":{"@type":"WebPage","@id":"https://upbrella.github.io/jekyll-theme-yat/refactor/2023/10/14/store-api.html"},"url":"https://upbrella.github.io/jekyll-theme-yat/refactor/2023/10/14/store-api.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-noto-sans@0.0.72/index.min.css">
+  <link rel="stylesheet" href="/jekyll-theme-yat/assets/css/main.css">
+  <script src="/jekyll-theme-yat/assets/js/main.js"></script><link type="application/atom+xml" rel="alternate" href="https://upbrella.github.io/jekyll-theme-yat/feed.xml" title=" ">
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/default.min.css">
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<!-- and it's easy to individually load additional languages -->
+<script charset="UTF-8" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/languages/go.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+// Init highlight js
+document.addEventListener('DOMContentLoaded', function(event) {
+  var els = document.querySelectorAll('pre code')
+
+  function addLangData(block) {
+    var outer = block.parentElement.parentElement.parentElement;
+    var lang = block.getAttribute('data-lang');
+    for (var i = 0; i < outer.classList.length; i++) {
+      var cls = outer.classList[i];
+      if (cls.startsWith('language-')) {
+        lang = cls;
+        break;
+      }
+    }
+    if (!lang) {
+      cls = block.getAttribute('class');
+      lang = cls ? cls.replace('hljs ', '') : '';
+    }
+    if (lang.startsWith('language-')) {
+      lang = lang.substr(9);
+    }
+    block.setAttribute('class', 'hljs ' + lang);
+    block.parentNode.setAttribute('data-lang', lang);
+  }
+
+  function addBadge(block) {
+    var enabled = ('true' || 'true').toLowerCase();
+    if (enabled == 'true') {
+      var pre = block.parentElement;
+      pre.classList.add('badge');
+    }
+  }
+
+  function handle(block) {
+    addLangData(block);
+    addBadge(block)
+    hljs.highlightBlock(block);
+  }
+
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    handle(el);
+  }
+});
+</script>
+
+<style>
+  /* code language badge */
+  pre.badge::before {
+    content: attr(data-lang);
+    color: #fff;
+    background-color: #ff4e00;
+    padding: 0 .5em;
+    border-radius: 0 2px;
+    text-transform: uppercase;
+    text-align: center;
+    min-width: 32px;
+    display: inline-block;
+    position: absolute;
+    right: 0;
+  }
+
+  /* fix wrong badge display for firefox browser */
+  code > table pre::before {
+    display: none;
+  }
+</style>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe-lightbox.umd.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe.umd.min.js"></script>
+<link href="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/photoswipe.min.css" rel="stylesheet">
+<style>
+  .pswp .pswp__container .pswp__img {
+    background-color: white;
+  }
+</style>
+
+<script>
+  function initPhotoSwipe() {
+    let customOptions = {};
+
+    try {
+      const data = ``.replaceAll("=>", ":");
+      customOptions = JSON.parse(data);
+    } catch (e) {
+      console.error("Invalid custom photo previewer options! " + e.message);
+    }
+
+    // Define object and gallery options
+    const options = Object.assign(
+      {
+        gallery: "section.main",
+        children: "a.photo-swipe",
+        photo_scale: 2,
+        // dynamic import is not supported in UMD version
+        pswpModule: PhotoSwipe,
+      },
+      customOptions
+    );
+
+    const galleryEl = document.querySelector(options.gallery);
+    if (!galleryEl) {
+      return;
+    }
+
+    const imgEls = [];
+    const els = galleryEl.querySelectorAll("img:not(.emoji)");
+    els.forEach((el) => {
+      if (!imgEls.includes(el)) {
+        imgEls.push(el);
+      }
+    });
+
+    if (imgEls.length === 0) {
+      return;
+    }
+
+    imgEls.forEach((imgEl) => {
+      imgEl.outerHTML = `
+      <a class="photo-swipe"
+        href="${imgEl.src}"
+        data-pswp-width="${
+          Math.max(imgEl.naturalWidth, imgEl.width) * options.photo_scale
+        }"
+        data-pswp-height="${
+          Math.max(imgEl.naturalHeight, imgEl.height) * options.photo_scale
+        }"
+        data-pswp-caption="${imgEl.getAttribute("caption") || imgEl.alt}"
+        target="_blank">
+        ${imgEl.outerHTML}
+      </a>`;
+    });
+
+    // Initialize PhotoSwipe 5
+    var lightbox = new PhotoSwipeLightbox(options);
+
+    lightbox.init();
+  }
+
+  window.addEventListener("load", initPhotoSwipe);
+</script>
+</head>
+<body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<header class="site-header site-header-transparent" role="banner">
+  <div class="wrapper">
+    <div class="site-header-inner">
+<span class="site-brand"><a class="site-brand-inner" rel="author" href="/jekyll-theme-yat/">
+  <img class="site-favicon" title=" " src="/assets/images/main_logo.svg" onerror="this.style.display='none'">
+   
+</a>
+</span><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger">
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewbox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"></path>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+<a class="page-link" href="/jekyll-theme-yat/archives.html">ARCHIVES</a><a class="page-link" href="/jekyll-theme-yat/categories.html">CATEGORIES</a><a class="page-link" href="/jekyll-theme-yat/tags.html">TAGS</a>
+
+
+
+
+
+
+
+
+
+<span class="page-link">
+
+
+
+<div id="google_translate_element" style="display: none;">
+</div>
+
+<span class="ct-language">
+  <ul class="list-unstyled ct-language-dropdown">
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="ko">
+          
+          <img src="https://cdn.countryflags.com/thumbs/south-korea/flag-400.png" title="Korean">
+          
+        </a>
+      </li>
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="en">
+          
+          <img src="https://cdn.countryflags.com/thumbs/united-states-of-america/flag-400.png" title="English">
+          
+        </a>
+      </li>
+    
+  </ul>
+</span>
+
+<script type="text/javascript">
+function googleTranslateElementInit() {
+  new google.translate.TranslateElement({
+    pageLanguage: 'ko',
+    autoDisplay: false,
+    layout: google.translate.TranslateElement.InlineLayout.VERTICAL
+  }, 'google_translate_element');
+
+  // Links to cross-origin destinations are unsafe
+  var gll = document.getElementsByClassName('goog-logo-link')[0];
+  if (gll) {
+    gll.setAttribute('rel', 'noopener');
+  }
+
+  function restoreLang() {
+    var iframe = document.getElementsByClassName('goog-te-banner-frame')[0];
+    if (!iframe) return;
+
+    var innerDoc = iframe.contentDocument || iframe.contentWindow.document;
+    var restore_el = innerDoc.getElementsByTagName("button");
+
+    for (var i = 0; i < restore_el.length; i++) {
+      if (restore_el[i].id.indexOf("restore") >= 0) {
+        restore_el[i].click();
+        var close_el = innerDoc.getElementsByClassName("goog-close-link");
+        close_el[0].click();
+        return;
+      }
+    }
+  }
+
+  function triggerHtmlEvent(element, eventName) {
+    var event;
+    if (document.createEvent) {
+      event = document.createEvent('HTMLEvents');
+      event.initEvent(eventName, true, true);
+      element.dispatchEvent(event);
+    } else {
+      event = document.createEventObject();
+      event.eventType = eventName;
+      element.fireEvent('on' + event.eventType, event);
+    }
+  }
+
+  var googleCombo = document.querySelector("select.goog-te-combo");
+  var langSelect = document.querySelector('.ct-language');
+  langSelect.addEventListener('click', function(event) {
+    if (!event.target) {
+      return;
+    }
+
+    var selected = document.querySelector('.ct-language .ct-language-selected');
+    if (selected) {
+      selected.classList.remove('ct-language-selected');
+    }
+
+    var target = event.target;
+    while (target && target !== langSelect ) {
+      if (target.matches('.lang-select')) {
+        break;
+      }
+      target = target.parentElement;
+    }
+
+    if (target && target.matches('.lang-select')) {
+      var lang = target.getAttribute('data-lang');
+      if (googleCombo.value == lang) {
+        restoreLang();
+      } else {
+        target.parentElement.classList.add('ct-language-selected');
+        googleCombo.value = lang;
+        triggerHtmlEvent(googleCombo, 'change');
+      }
+    }
+
+    event.preventDefault();
+  });
+}
+</script>
+
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</span>
+</div>
+      </nav>
+</div>
+  </div>
+</header>
+
+<script>
+  function initHeader() {
+    var lastScrollY = getScrollPos().y;
+    var documentElement = document.documentElement;
+
+    function storeScrollData() {
+      var y = getScrollPos().y;documentElement.setAttribute("data-header-transparent", "");var scrollStatus = "";
+
+      if (y <= 0) {
+        scrollStatus = "top";
+      } else if ((window.innerHeight + y) >= document.body.offsetHeight) {
+        scrollStatus = "bottom";
+      } else {
+        var isScrollDown = (y - lastScrollY > 0) ? true : false;
+        scrollStatus = isScrollDown ? "down" : "up";
+      }
+
+      lastScrollY = y;
+      documentElement.setAttribute("data-scroll-status", scrollStatus);
+    }
+
+    window.addEventListener('scroll', function(e) {
+      storeScrollData();
+    });
+
+    storeScrollData();
+  }
+  document.addEventListener('DOMContentLoaded', initHeader);
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+    html .page-banner {
+      background: rgba(0, 0, 0, 0.8);
+    }
+  </style>
+<style>html .page-banner {
+      height:  117.76px;
+      min-height: 320px;
+    }
+    html[data-scroll-status="top"] .page-banner {
+      height: 320px;
+    }
+  </style>
+<style>
+    html .page-banner .page-banner-img > *:first-child {
+      opacity: 0.8;
+    }
+
+    html[data-theme="dark"] .page-banner .page-banner-img > *:first-child {
+      opacity: 0.5744;
+    }
+  </style>
+<section class="page-banner">
+    <div class="page-banner-img">
+<div style="background-image: url(/jekyll-theme-yat/assets/images/banners/home.jpeg)"></div>
+        <img class="img-placeholder" src="/jekyll-theme-yat/assets/images/banners/home.jpeg">
+</div>
+    <div class="wrapper">
+      <div class="page-banner-inner">
+<header class="post-header">
+  <h1 class="post-title p-name" itemprop="name headline">
+    협업지점 조회 성능 개선
+  </h1>
+  <h2 class="post-subtitle">
+    Store API 개선
+  </h2>
+
+  <p class="post-meta">
+    <time class="dt-published" datetime="2023-10-14T15:00:00+00:00" itemprop="datePublished"><i class="fa fa-calendar"></i> Oct 14, 2023
+    </time>
+
+     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <span class="post-reading-time left-vsplit"><i class="fa fa-clock-o"></i> About 25 mins</span>
+
+    
+    </p>
+<div style="margin-bottom: 15px;">작성자: 임동현</div>
+    
+
+
+    <!-- 
+    
+      
+    
+      
+    
+     -->
+  
+  <div class="post-tags"><a class="post-tag" href="/jekyll-theme-yat/tags.html#Refactor">#Refactor</a></div></header>
+</div>
+    </div>
+  </section><script>
+  function hashLocate(hashValue) {
+    hashValue = hashValue.replace(/^.*#h-/, '');
+    hashValue = decodeURIComponent(hashValue);
+    var element = document.getElementById(hashValue);
+
+    if (!element) {
+      return;
+    }
+
+    var header = document.querySelector('header.site-header');
+    var headerRect = header.getBoundingClientRect();
+    var headerTop = Math.floor(headerRect.top);
+    var headerHeight = Math.floor(headerRect.height);
+    var scrollPos = getScrollPos();
+    var offsetY = element.offsetTop - (headerTop + headerHeight + 20);
+
+    if (offsetY == scrollPos.y) {
+      return;
+    }
+
+    if (headerTop == 0  && offsetY > scrollPos.y) {
+      offsetY += headerHeight + 2;
+    } else if (headerTop < 0  && offsetY < scrollPos.y) {
+      offsetY -= headerHeight - 2;
+    }
+
+    smoothScrollTo(offsetY);
+  }
+
+  // The first event occurred
+  window.addEventListener('load', function(event) {
+    if (window.location.hash) {
+      hashLocate(window.location.hash);
+    }
+  });
+
+  // The first event occurred
+  window.addEventListener('click', function(event) {
+    if (event.target.tagName.toLowerCase() == 'a') {
+      hashLocate(event.target.getAttribute('href'));
+    }
+  });
+</script>
+<div class="theme-toggle">
+  <input type="checkbox" id="theme-switch">
+  <label for="theme-switch">
+    <div class="toggle"></div>
+    <div class="names">
+      <p class="light">Light</p>
+      <p class="dark">Dark</p>
+    </div>
+  </label>
+</div>
+
+
+
+
+<script>
+  (function () {
+    var sw = document.getElementById('theme-switch');
+    var html = document.getElementsByTagName('html')[0];
+    var nightModeOption = ('auto' || 'auto').toLowerCase();
+    var storage = nightModeOption === 'manual' ? localStorage : sessionStorage;
+    var themeData = loadThemeData();
+
+    function saveThemeData(data) {
+      storage.setItem('theme', JSON.stringify(data));
+    }
+
+    function loadThemeData() {
+      var data = storage.getItem('theme');
+      try {
+        data = JSON.parse(data ? data : '');
+      } catch (e) {
+        data = { nightShift: undefined, autoToggleAt: 0 };
+        saveThemeData(data);
+      }
+      return data;
+    }
+
+    function handleThemeToggle(nightShift) {
+      themeData.nightShift = nightShift;
+      saveThemeData(themeData);
+      html.dataset.theme = nightShift ? 'dark' : 'light';
+      setTimeout(function () {
+        sw.checked = nightShift ? true : false;
+      }, 50);
+    }
+
+    function autoThemeToggle() {
+      // Next time point of theme toggle
+      var now = new Date();
+      var toggleAt = new Date();
+      var hours = now.getHours();
+      var nightShift = hours >= 19 || hours <= 7;
+
+      if (nightShift) {
+        if (hours > 7) {
+          toggleAt.setDate(toggleAt.getDate() + 1);
+        }
+        toggleAt.setHours(7);
+      } else {
+        toggleAt.setHours(19);
+      }
+
+      toggleAt.setMinutes(0);
+      toggleAt.setSeconds(0);
+      toggleAt.setMilliseconds(0);
+
+      var delay = toggleAt.getTime() - now.getTime();
+
+      // auto toggle theme mode
+      setTimeout(function () {
+        handleThemeToggle(!nightShift);
+      }, delay);
+
+      return {
+        nightShift: nightShift,
+        toggleAt: toggleAt.getTime(),
+      };
+    }
+
+    // Listen the theme toggle event
+    sw.addEventListener('change', function (event) {
+      handleThemeToggle(event.target.checked);
+    });
+
+    if (nightModeOption == 'auto') {
+      var data = autoThemeToggle();
+
+      // Toggle theme by local setting
+      if (data.toggleAt > themeData.autoToggleAt) {
+        themeData.autoToggleAt = data.toggleAt;
+        handleThemeToggle(data.nightShift);
+      } else {
+        handleThemeToggle(themeData.nightShift);
+      }
+    } else if (nightModeOption == 'manual') {
+      handleThemeToggle(themeData.nightShift);
+    } else {
+      var nightShift = themeData.nightShift;
+      if (nightShift === undefined) {
+        nightShift = nightModeOption === 'on';
+      }
+      handleThemeToggle(nightShift);
+    }
+  })();
+</script>
+<div id="click-to-top" class="click-to-top">
+  <i class="fa fa-arrow-up"></i>
+</div>
+<script>
+  (function () {
+    const clickToTop = document.getElementById('click-to-top');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 100) {
+        clickToTop.classList.add('show')
+      }else {
+        clickToTop.classList.remove('show')
+      }
+    });
+    clickToTop.addEventListener('click', () => {
+      window.smoothScrollTo(0);
+    });
+  })();
+</script>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <div class="framework">
+  <section class="main">
+
+     <div class="post">
+  <section>
+
+
+
+
+
+
+
+
+
+<article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+    <div class="post-content e-content" itemprop="articleBody">
+
+      <h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>기존 코드는 개발 일정을 맞추기 위해 성능의 이슈를 감안하더라도 기능 완성에 초점을 두었습니다. 또한 프론트엔드와의 개발 일정이 맞지 않아 기능을 개발한 후 바로 최적화할 수 없는 상황이었습니다.</p>
+
+<p>현재는 양 측이 모두 개발이 완료된 상황이라 코드를 분석해보니 많은 문제점을 발견할 수 있었습니다.</p>
+
+<p>기존 코드</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">StoreDetail</span><span class="o">&gt;</span> <span class="nf">findAllStores</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">selectFrom</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">leftJoin</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">businessHours</span><span class="o">,</span> <span class="n">businessHour</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">leftJoin</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeImages</span><span class="o">,</span> <span class="n">storeImage</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">distinct</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>위 코드에서 가장 큰 문제점은 필요하지 않은 StoreImage와 BusinessHour를 조회한다는 것입니다.</p>
+
+<p>기획서가 나올 당시, 협업지점 관리 페이지 초기 화면에서 images 전부와, businessHours 전부를 조회하기로 하였지만, 개발을 이어나가다 보니 기획이 변경되었고 두 개의 List들은 더이상 필요없는 상황이 되었습니다.</p>
+
+<h2 id="2-성능개선-v1">2. 성능개선 V1</h2>
+<p><img src="https://user-images.githubusercontent.com/115435784/275314185-c20f62d8-be97-47c0-bf29-73bcd5384ea8.png" alt="image"></p>
+
+<p>위와 같이, 이미지와 영업시간은 따로 클릭을 해야 조회가 되기 때문에, 수많은 협업지점들에 대해 데이터가 조회될 필요가 없었습니다.</p>
+
+<p>따라서 다음과 같이 코드를 개선하였습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">StoreDetail</span><span class="o">&gt;</span> <span class="nf">findAllStores</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">selectFrom</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>하지만 여전히 코드상 문제가 남아있습니다.</p>
+
+<p>여러 엔티티들간의 연관관계로 인해 23개나 되는 N+1 문제가 발생했습니다.</p>
+
+<p>이를 해결하기 위해 두 가지 방법을 고민했습니다.</p>
+
+<h2 id="3-성능개선-v2">3. 성능개선 V2</h2>
+
+<p><strong>FetchJoin</strong></p>
+
+<p>FetchJoin을 활용해서 연관된 데이터를 전부 가져오는 방법을 사용해보겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">StoreDetail</span><span class="o">&gt;</span> <span class="nf">findAllStores</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">selectFrom</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>FetchJoin을 통해 데이터를 가져오니 N+1 문제가 해결되었지만, 여전히 두 가지의 문제점이 남아있었습니다.</p>
+
+<p>페이징이 불가하다는 점과, 필요한 필드수에 비해 너무 많은 필드가 조회된다는 것이었습니다.</p>
+
+<p>페이징만 처리하기 위해서는 BatchSize를 조절해서 문제를 해결하도록 시도해볼 수 있겠으나, 현재는 페이징과 필요한 필드만 조회해야 하기 때문에 DTO를 조회하는 방법을 사용해보도록 하겠습니다.</p>
+
+<h2 id="4-성능개선-v3">4. 성능개선 V3</h2>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">SingleStoreResponse</span><span class="o">&gt;</span> <span class="nf">findAllStoresForAdmin</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">select</span><span class="o">(</span><span class="k">new</span> <span class="nc">QSingleStoreResponse</span><span class="o">(</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">id</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">name</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">category</span><span class="o">,</span>
+                        <span class="k">new</span> <span class="nf">QSingleClassificationResponse</span><span class="o">(</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">id</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">type</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">name</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">latitude</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">longitude</span>
+                        <span class="o">),</span>
+                        <span class="k">new</span> <span class="nf">QSingleSubClassificationResponse</span><span class="o">(</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">.</span><span class="na">id</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">.</span><span class="na">type</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">.</span><span class="na">name</span>
+                        <span class="o">),</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">activated</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">address</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">addressDetail</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">umbrellaLocation</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">workingHour</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">contactInfo</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">instaUrl</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">latitude</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">longitude</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">content</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">password</span>
+                <span class="o">))</span>
+                <span class="o">.</span><span class="na">from</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>일반적으로 JPA(Java Persistence API)는 연관 엔터티를 실제로 사용하는 시점에 데이터베이스에서 Entity를 로드(Lazy Loading)합니다. 그러나 이 코드에서는 실제 Entity를 로드하는 것이 아니라, 쿼리 실행 결과를 바로 DTO로 변환하기 때문에 Lazy Loading이 발생하지 않고, 따라서 N+1 문제도 발생하지 않습니다.</p>
+
+<p>이렇게 문제를 해결함으로써, 추후에 협업지점이 많아질 경우에 페이징 처리를 할 수 있고 성능개선도 이뤄낼 수 있었습니다.</p>
+
+<h2 id="4-개선-전-후-성능-비교">4. 개선 전 후 성능 비교</h2>
+
+<p><strong>개선 전</strong></p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+        <span class="k">distinct</span> <span class="n">storedetai0_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_6_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_8_1_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_2_2_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_2_3_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address</span> <span class="k">as</span> <span class="n">address2_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address_detail</span> <span class="k">as</span> <span class="n">address_3_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">contact_info</span> <span class="k">as</span> <span class="n">contact_4_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">content</span> <span class="k">as</span> <span class="n">content5_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">insta_url</span> <span class="k">as</span> <span class="n">insta_ur6_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span> <span class="k">as</span> <span class="n">store_me9_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">umbrella_location</span> <span class="k">as</span> <span class="n">umbrella7_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">working_hour</span> <span class="k">as</span> <span class="n">working_8_6_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">activated</span> <span class="k">as</span> <span class="n">activate2_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">category</span> <span class="k">as</span> <span class="n">category3_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span> <span class="k">as</span> <span class="n">classifi9_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">deleted</span> <span class="k">as</span> <span class="n">deleted4_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude5_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud6_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name7_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">password</span> <span class="k">as</span> <span class="n">password8_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span> <span class="k">as</span> <span class="n">sub_cla10_8_1_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude2_2_2_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud3_2_2_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name4_2_2_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">type5_2_2_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude2_2_3_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud3_2_3_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name4_2_3_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">type5_2_3_</span> 
+    <span class="k">from</span>
+        <span class="n">store_detail</span> <span class="n">storedetai0_</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta1_</span> 
+            <span class="k">on</span> <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span><span class="o">=</span><span class="n">storemeta1_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica2_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span><span class="o">=</span><span class="n">classifica2_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica3_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span><span class="o">=</span><span class="n">classifica3_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">where</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">deleted</span><span class="o">=?</span>
+</code></pre></div></div>
+
+<p>필요한 필드는 22개인데 비해 29개의 필드를 조회하고 있습니다.</p>
+
+<p>위의 쿼리의 평균 실행 속도는 0.4s 입니다.</p>
+
+<p><strong>개선 후</strong></p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span> <span class="k">as</span> <span class="n">col_0_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_1_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">category</span> <span class="k">as</span> <span class="n">col_2_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span> <span class="k">as</span> <span class="n">col_3_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">col_4_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_5_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">col_6_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">col_7_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span> <span class="k">as</span> <span class="n">col_8_0_</span><span class="p">,</span>
+        <span class="n">classifica17_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">col_9_0_</span><span class="p">,</span>
+        <span class="n">classifica17_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_10_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">activated</span> <span class="k">as</span> <span class="n">col_11_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address</span> <span class="k">as</span> <span class="n">col_12_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address_detail</span> <span class="k">as</span> <span class="n">col_13_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">umbrella_location</span> <span class="k">as</span> <span class="n">col_14_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">working_hour</span> <span class="k">as</span> <span class="n">col_15_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">contact_info</span> <span class="k">as</span> <span class="n">col_16_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">insta_url</span> <span class="k">as</span> <span class="n">col_17_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">col_18_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">col_19_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">content</span> <span class="k">as</span> <span class="n">col_20_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">password</span> <span class="k">as</span> <span class="n">col_21_0_</span> 
+    <span class="k">from</span>
+        <span class="n">store_detail</span> <span class="n">storedetai0_</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta1_</span> 
+            <span class="k">on</span> <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span><span class="o">=</span><span class="n">storemeta1_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica2_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span><span class="o">=</span><span class="n">classifica2_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica3_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span><span class="o">=</span><span class="n">classifica3_</span><span class="p">.</span><span class="n">id</span> <span class="k">cross</span> 
+    <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica8_</span> <span class="k">cross</span> 
+    <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica17_</span> 
+    <span class="k">where</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span><span class="o">=</span><span class="n">classifica8_</span><span class="p">.</span><span class="n">id</span> 
+        <span class="k">and</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span><span class="o">=</span><span class="n">classifica17_</span><span class="p">.</span><span class="n">id</span> 
+        <span class="k">and</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">deleted</span><span class="o">=?</span>
+</code></pre></div></div>
+
+<p>위 쿼리는 필요한 필드만 직접 조회하여 N+1 문제를 해결하고 쿼리의 성능을 향상시켰습니다.</p>
+
+<p>쿼리 평균 실행 속도는 0.08s 입니다.</p>
+
+<p>결과적으로 쿼리 실행속도를 0.4s 에서 0.08s로 80%의 성능 개선을 이뤄냈습니다.</p>
+
+
+    </div>
+
+</article>
+<div class="post-nav">
+<a class="previous" href="/jekyll-theme-yat/redis/2023/09/24/db-cache.html" title="캐시를 통한 성능 최적화">캐시를 통한 성능 최적화</a><span></span>
+</div>
+<div class="post-related">
+      <div>Related Articles</div>
+      <ul>
+        <li>
+          <a class="post-link" href="/jekyll-theme-yat/infrastructure/2021/08/18/ECR-ECS-Infra.html" title="">컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/jpa/2023/09/19/refactor-history.html" title="">JPA Repository는 Entity만을 조회해야할까?</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/test/2021/08/09/introduction-of-jacoco-coverage.html" title="">내 테스트 코드는 몇 점짜리? Jacoco를 통한 커버리지 관리</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/wiremock/2021/08/25/wiremock.html" title="">외부 API 의존성 문제 해결, WireMock</a>
+        </li>
+</ul>
+    </div>
+<div class="post-comments"></div></section>
+</div>
+
+<!-- Utterances 댓글 스니핏 -->
+<script src="https://utteranc.es/client.js" repo="UPbrella/UPbrella.github.io" issue-term="pathname" theme="github-light" crossorigin="anonymous" async></script>
+
+
+  </section>
+  <section class="sidebar" style="margin-left: 15px;">
+    <!-- Get sidebar items --><style type="text/css" media="screen">
+.post-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+</style>
+
+<div class="post-menu">
+  <div class="post-menu-title">TOC</div>
+  <div class="post-menu-content"></div>
+</div>
+
+<script>
+  function generateContent() {
+    var menu = document.querySelector(".post-menu");
+    var menuContent =  menu.querySelector(".post-menu-content");
+    var headings = document.querySelector(".post-content").querySelectorAll("h2, h3, h4, h5, h6");
+
+    // Hide menu when no headings
+    if (headings.length === 0) {
+      return menu.style.display = "none";
+    }
+
+    // Generate post menu
+    var menuHTML = '';
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      menuHTML += (
+        '<li class="h-' + h.tagName.toLowerCase() + '">'
+        + '<a href="#h-' + h.getAttribute('id') + '">' + h.textContent + '</a></li>');
+    }
+
+    menuContent.innerHTML = '<ul>' + menuHTML + '</ul>';
+
+    // The header element
+    var header = document.querySelector('header.site-header');
+
+    function doMenuCollapse(index, over_items) {
+      var items = menuContent.firstChild.children;
+
+      if (over_items == undefined) {
+        over_items = 20;
+      }
+
+      if (items.length < over_items) {
+        return;
+      }
+
+      var activeItem = items[index];
+      var beginItem = activeItem
+      var endItem = activeItem
+      var beginIndex = index;
+      var endIndex = index + 1;
+      while (beginIndex >= 0
+        && !items[beginIndex].classList.contains('h-h2')) {
+        beginIndex -= 1;
+      }
+      while (endIndex < items.length
+        && !items[endIndex].classList.contains('h-h2')) {
+        endIndex += 1;
+      }
+      for (var i = 0; i < beginIndex; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+      for (var i = beginIndex + 1; i < endIndex; i++) {
+        item = items[i]
+        // if (!item.classList.contains('h-h2')) {
+          item.style.display = '';
+        // }
+      }
+      for (var i = endIndex; i < items.length; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+    }
+
+    // Init menu collapsed
+    doMenuCollapse(-1);
+
+    // Active the menu item
+    window.addEventListener('scroll', function (event) {
+      var lastActive = menuContent.querySelector('.active');
+      var changed = true;
+      var activeIndex = -1;
+      for (var i = headings.length - 1; i >= 0; i--) {
+        var h = headings[i];
+        var headingRect = h.getBoundingClientRect();
+        var headerRect = header.getBoundingClientRect();
+        var headerTop = Math.floor(headerRect.top);
+        var headerHeight = Math.floor(headerRect.height);
+        var headerHeight = headerTop + headerHeight + 20;
+        if (headingRect.top <= headerHeight) {
+          var id = 'h-' + h.getAttribute('id');
+          var a = menuContent.querySelector('a[href="#' + id  + '"]');
+          var curActive = a.parentNode;
+          if (curActive) {
+            curActive.classList.add('active');
+            activeIndex = i;
+          }
+          if (lastActive == curActive) {
+            changed = false;
+          }
+          break;
+        }
+      }
+      if (changed) {
+        if (lastActive) {
+          lastActive.classList.remove('active');
+        }
+        doMenuCollapse(activeIndex);
+      }
+      event.preventDefault();
+    });
+  }
+  generateContent();
+</script>
+</section>
+</div>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/jekyll-theme-yat/"></data>
+
+  <div class="wrapper">
+    <div class="site-footer-inner">
+<div></div>
+      <div>Contact <a title="Upbrella Github Repository" href="https://github.com/UPbrella">GitHub</a> &amp; <a>WebSite</a> </div>
+      <!-- <div>Powered by <a title="Jekyll is a simple, blog-aware, static site
+      generator." href="https://jekyllrb.com/">Jekyll</a> &amp; <a title="Yat, yet
+      another theme." href="https://github.com/jeffreytse/jekyll-theme-yat">Yat Theme</a>.</div>
+      <div class="footer-col rss-subscribe">Subscribe <a href="/jekyll-theme-yat/feed.xml">via RSS</a></div> -->
+    </div>
+  </div>
+</footer>
+</body>
+</html>

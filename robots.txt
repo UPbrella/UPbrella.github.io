@@ -1,0 +1,1 @@
+Sitemap: https://upbrella.github.io/jekyll-theme-yat/sitemap.xml

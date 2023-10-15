@@ -1,0 +1,1762 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="ko"><generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator><link href="https://upbrella.github.io/jekyll-theme-yat/feed.xml" rel="self" type="application/atom+xml" /><link href="https://upbrella.github.io/jekyll-theme-yat/" rel="alternate" type="text/html" hreflang="ko" /><updated>2023-10-15T08:25:45+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/feed.xml</id><title type="html"> </title><subtitle>공유 우산 | 업브렐라 팀의 이슈, 트러블슈팅, 일하는 방식을 이야기합니다.</subtitle><author><name>Upbrella</name></author><entry><title type="html">협업지점 조회 성능 개선</title><link href="https://upbrella.github.io/jekyll-theme-yat/refactor/2023/10/14/store-api.html" rel="alternate" type="text/html" title="협업지점 조회 성능 개선" /><published>2023-10-14T15:00:00+00:00</published><updated>2023-10-14T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/refactor/2023/10/14/store-api</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/refactor/2023/10/14/store-api.html"><![CDATA[<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>기존 코드는 개발 일정을 맞추기 위해 성능의 이슈를 감안하더라도 기능 완성에 초점을 두었습니다. 또한 프론트엔드와의 개발 일정이 맞지 않아 기능을 개발한 후 바로 최적화할 수 없는 상황이었습니다.</p>
+
+<p>현재는 양 측이 모두 개발이 완료된 상황이라 코드를 분석해보니 많은 문제점을 발견할 수 있었습니다.</p>
+
+<p>기존 코드</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">StoreDetail</span><span class="o">&gt;</span> <span class="nf">findAllStores</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">selectFrom</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">leftJoin</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">businessHours</span><span class="o">,</span> <span class="n">businessHour</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">leftJoin</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeImages</span><span class="o">,</span> <span class="n">storeImage</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">distinct</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>위 코드에서 가장 큰 문제점은 필요하지 않은 StoreImage와 BusinessHour를 조회한다는 것입니다.</p>
+
+<p>기획서가 나올 당시, 협업지점 관리 페이지 초기 화면에서 images 전부와, businessHours 전부를 조회하기로 하였지만, 개발을 이어나가다 보니 기획이 변경되었고 두 개의 List들은 더이상 필요없는 상황이 되었습니다.</p>
+
+<h2 id="2-성능개선-v1">2. 성능개선 V1</h2>
+<p><img src="https://user-images.githubusercontent.com/115435784/275314185-c20f62d8-be97-47c0-bf29-73bcd5384ea8.png" alt="image" /></p>
+
+<p>위와 같이, 이미지와 영업시간은 따로 클릭을 해야 조회가 되기 때문에, 수많은 협업지점들에 대해 데이터가 조회될 필요가 없었습니다.</p>
+
+<p>따라서 다음과 같이 코드를 개선하였습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">StoreDetail</span><span class="o">&gt;</span> <span class="nf">findAllStores</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">selectFrom</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>하지만 여전히 코드상 문제가 남아있습니다.</p>
+
+<p>여러 엔티티들간의 연관관계로 인해 23개나 되는 N+1 문제가 발생했습니다.</p>
+
+<p>이를 해결하기 위해 두 가지 방법을 고민했습니다.</p>
+
+<h2 id="3-성능개선-v2">3. 성능개선 V2</h2>
+
+<p><strong>FetchJoin</strong></p>
+
+<p>FetchJoin을 활용해서 연관된 데이터를 전부 가져오는 방법을 사용해보겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">StoreDetail</span><span class="o">&gt;</span> <span class="nf">findAllStores</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">selectFrom</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>FetchJoin을 통해 데이터를 가져오니 N+1 문제가 해결되었지만, 여전히 두 가지의 문제점이 남아있었습니다.</p>
+
+<p>페이징이 불가하다는 점과, 필요한 필드수에 비해 너무 많은 필드가 조회된다는 것이었습니다.</p>
+
+<p>페이징만 처리하기 위해서는 BatchSize를 조절해서 문제를 해결하도록 시도해볼 수 있겠으나, 현재는 페이징과 필요한 필드만 조회해야 하기 때문에 DTO를 조회하는 방법을 사용해보도록 하겠습니다.</p>
+
+<h2 id="4-성능개선-v3">4. 성능개선 V3</h2>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">SingleStoreResponse</span><span class="o">&gt;</span> <span class="nf">findAllStoresForAdmin</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">select</span><span class="o">(</span><span class="k">new</span> <span class="nc">QSingleStoreResponse</span><span class="o">(</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">id</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">name</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">category</span><span class="o">,</span>
+                        <span class="k">new</span> <span class="nf">QSingleClassificationResponse</span><span class="o">(</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">id</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">type</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">name</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">latitude</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">.</span><span class="na">longitude</span>
+                        <span class="o">),</span>
+                        <span class="k">new</span> <span class="nf">QSingleSubClassificationResponse</span><span class="o">(</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">.</span><span class="na">id</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">.</span><span class="na">type</span><span class="o">,</span>
+                                <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">.</span><span class="na">name</span>
+                        <span class="o">),</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">activated</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">address</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">addressDetail</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">umbrellaLocation</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">workingHour</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">contactInfo</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">instaUrl</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">latitude</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">longitude</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">content</span><span class="o">,</span>
+                        <span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">.</span><span class="na">password</span>
+                <span class="o">))</span>
+                <span class="o">.</span><span class="na">from</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeDetail</span><span class="o">.</span><span class="na">storeMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">classification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">subClassification</span><span class="o">,</span> <span class="n">classification</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">storeMeta</span><span class="o">.</span><span class="na">deleted</span><span class="o">.</span><span class="na">isFalse</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>일반적으로 JPA(Java Persistence API)는 연관 엔터티를 실제로 사용하는 시점에 데이터베이스에서 Entity를 로드(Lazy Loading)합니다. 그러나 이 코드에서는 실제 Entity를 로드하는 것이 아니라, 쿼리 실행 결과를 바로 DTO로 변환하기 때문에 Lazy Loading이 발생하지 않고, 따라서 N+1 문제도 발생하지 않습니다.</p>
+
+<p>이렇게 문제를 해결함으로써, 추후에 협업지점이 많아질 경우에 페이징 처리를 할 수 있고 성능개선도 이뤄낼 수 있었습니다.</p>
+
+<h2 id="4-개선-전-후-성능-비교">4. 개선 전 후 성능 비교</h2>
+
+<p><strong>개선 전</strong></p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+        <span class="k">distinct</span> <span class="n">storedetai0_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_6_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_8_1_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_2_2_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_2_3_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address</span> <span class="k">as</span> <span class="n">address2_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address_detail</span> <span class="k">as</span> <span class="n">address_3_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">contact_info</span> <span class="k">as</span> <span class="n">contact_4_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">content</span> <span class="k">as</span> <span class="n">content5_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">insta_url</span> <span class="k">as</span> <span class="n">insta_ur6_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span> <span class="k">as</span> <span class="n">store_me9_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">umbrella_location</span> <span class="k">as</span> <span class="n">umbrella7_6_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">working_hour</span> <span class="k">as</span> <span class="n">working_8_6_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">activated</span> <span class="k">as</span> <span class="n">activate2_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">category</span> <span class="k">as</span> <span class="n">category3_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span> <span class="k">as</span> <span class="n">classifi9_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">deleted</span> <span class="k">as</span> <span class="n">deleted4_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude5_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud6_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name7_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">password</span> <span class="k">as</span> <span class="n">password8_8_1_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span> <span class="k">as</span> <span class="n">sub_cla10_8_1_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude2_2_2_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud3_2_2_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name4_2_2_</span><span class="p">,</span>
+        <span class="n">classifica2_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">type5_2_2_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude2_2_3_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud3_2_3_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name4_2_3_</span><span class="p">,</span>
+        <span class="n">classifica3_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">type5_2_3_</span> 
+    <span class="k">from</span>
+        <span class="n">store_detail</span> <span class="n">storedetai0_</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta1_</span> 
+            <span class="k">on</span> <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span><span class="o">=</span><span class="n">storemeta1_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica2_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span><span class="o">=</span><span class="n">classifica2_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica3_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span><span class="o">=</span><span class="n">classifica3_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">where</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">deleted</span><span class="o">=?</span>
+</code></pre></div></div>
+
+<p>필요한 필드는 22개인데 비해 29개의 필드를 조회하고 있습니다.</p>
+
+<p>위의 쿼리의 평균 실행 속도는 0.4s 입니다.</p>
+
+<p><strong>개선 후</strong></p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span> <span class="k">as</span> <span class="n">col_0_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_1_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">category</span> <span class="k">as</span> <span class="n">col_2_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span> <span class="k">as</span> <span class="n">col_3_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">col_4_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_5_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">col_6_0_</span><span class="p">,</span>
+        <span class="n">classifica8_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">col_7_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span> <span class="k">as</span> <span class="n">col_8_0_</span><span class="p">,</span>
+        <span class="n">classifica17_</span><span class="p">.</span><span class="k">type</span> <span class="k">as</span> <span class="n">col_9_0_</span><span class="p">,</span>
+        <span class="n">classifica17_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_10_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">activated</span> <span class="k">as</span> <span class="n">col_11_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address</span> <span class="k">as</span> <span class="n">col_12_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">address_detail</span> <span class="k">as</span> <span class="n">col_13_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">umbrella_location</span> <span class="k">as</span> <span class="n">col_14_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">working_hour</span> <span class="k">as</span> <span class="n">col_15_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">contact_info</span> <span class="k">as</span> <span class="n">col_16_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">insta_url</span> <span class="k">as</span> <span class="n">col_17_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">col_18_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">col_19_0_</span><span class="p">,</span>
+        <span class="n">storedetai0_</span><span class="p">.</span><span class="n">content</span> <span class="k">as</span> <span class="n">col_20_0_</span><span class="p">,</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">password</span> <span class="k">as</span> <span class="n">col_21_0_</span> 
+    <span class="k">from</span>
+        <span class="n">store_detail</span> <span class="n">storedetai0_</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta1_</span> 
+            <span class="k">on</span> <span class="n">storedetai0_</span><span class="p">.</span><span class="n">store_meta_id</span><span class="o">=</span><span class="n">storemeta1_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica2_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span><span class="o">=</span><span class="n">classifica2_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica3_</span> 
+            <span class="k">on</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span><span class="o">=</span><span class="n">classifica3_</span><span class="p">.</span><span class="n">id</span> <span class="k">cross</span> 
+    <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica8_</span> <span class="k">cross</span> 
+    <span class="k">join</span>
+        <span class="n">classification</span> <span class="n">classifica17_</span> 
+    <span class="k">where</span>
+        <span class="n">storemeta1_</span><span class="p">.</span><span class="n">classification_id</span><span class="o">=</span><span class="n">classifica8_</span><span class="p">.</span><span class="n">id</span> 
+        <span class="k">and</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">sub_classification_id</span><span class="o">=</span><span class="n">classifica17_</span><span class="p">.</span><span class="n">id</span> 
+        <span class="k">and</span> <span class="n">storemeta1_</span><span class="p">.</span><span class="n">deleted</span><span class="o">=?</span>
+</code></pre></div></div>
+
+<p>위 쿼리는 필요한 필드만 직접 조회하여 N+1 문제를 해결하고 쿼리의 성능을 향상시켰습니다.</p>
+
+<p>쿼리 평균 실행 속도는 0.08s 입니다.</p>
+
+<p>결과적으로 쿼리 실행속도를 0.4s 에서 0.08s로 80%의 성능 개선을 이뤄냈습니다.</p>]]></content><author><name>임동현</name></author><category term="Refactor" /><category term="Refactor" /><summary type="html"><![CDATA[1. 문제 정의]]></summary></entry><entry><title type="html">캐시를 통한 성능 최적화</title><link href="https://upbrella.github.io/jekyll-theme-yat/redis/2023/09/24/db-cache.html" rel="alternate" type="text/html" title="캐시를 통한 성능 최적화" /><published>2023-09-24T15:00:00+00:00</published><updated>2023-09-24T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/redis/2023/09/24/db-cache</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/redis/2023/09/24/db-cache.html"><![CDATA[<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>업브렐라 서비스의 특성 상 협업지점의 CUD는 자주 일어나지 않지만, 조회 API는 자주 호출되고 있습니다.</p>
+
+<p>협업지점 조회 API는 여러 테이블이 조인을 하고, 자주 호출되는데 이것이 매번 호출되면 DB의 부하 증가로 이어지게 됩니다. 따라서 업브렐라 개발팀은 Redis를 이용하여 DB 데이터를 캐싱하기로 결정하였습니다.</p>
+
+<h2 id="2-redis">2. Redis</h2>
+
+<h3 id="2---1-redis-설치">2 - 1. Redis 설치</h3>
+
+<ul>
+  <li>아래의 명령어를 통해 redis를 설치해줍니다.</li>
+</ul>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo apt install redis-server
+</code></pre></div></div>
+
+<ul>
+  <li>redis 설정 변경</li>
+</ul>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo vim /etc/redis/redis.conf
+</code></pre></div></div>
+
+<p>여기서 bind 옵션을 허용하고 싶은 ip로 변경해줍니다.</p>
+
+<h3 id="2---2-spring-boot-redis-설정">2 - 2. Spring Boot Redis 설정</h3>
+
+<ul>
+  <li>build.gradle 의존성 추가해줍니다.</li>
+</ul>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    // Spring Data Redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // Spring Session Data Redis
+    implementation 'org.springframework.session:spring-session-data-redis'
+</code></pre></div></div>
+
+<h2 id="3-cache를-왜-써야할까">3. Cache를 왜 써야할까?</h2>
+
+<h3 id="3---1-파레토-법칙">3 - 1. 파레토 법칙</h3>
+
+<p><img width="675" alt="파레토 법칙" src="https://user-images.githubusercontent.com/115435784/270359884-54ca6bdb-1128-421c-be17-23b9417940bf.png" /></p>
+
+<p>이미지 출처 : https://www.briantracy.com/blog/personal-success/how-to-use-the-80-20-rule-pareto-principle/</p>
+
+<p>파레토 법칙은 업브렐라 서비스에 그대로 적용할 수 있습니다. 자주 사용되는 20% 데이터에 캐싱을 적용하면 80% 결과에 대해서 성능 향상을 기대할 수 있을 것입니다.</p>
+
+<h3 id="3---2-주의점">3 - 2. 주의점</h3>
+
+<p>캐싱을 적용하고 데이터 변경에 대한 설정을 하지 않는다면, 사용자는 데이터가 변경되었음에도 캐싱된 데이터를 반환받게 됩니다. 즉, 변경된 DB 데이터를 반영하지 못하게 됩니다.</p>
+
+<p>이러한 문제를 해결하기 위한 여러 전략은 다음과 같습니다.</p>
+
+<ol>
+  <li>TTL (Time To Live) 설정 : 캐시에 저장된 데이터에는 일정 시간 동안만 유지되게 만들 수 있는 TTL 값을 설정합니다. TTL이 만료되면 해당 캐시 데이터는 자동으로 삭제되며, 다음 요청 시 DB에서 다시 데이터를 가져와 캐시합니다. 하지만, 이 방법은 최신 데이터를 항상 반영한다는 보장은 없습니다.</li>
+  <li><strong>DB 변경 감지</strong>: DB의 데이터 변경을 감지할 수 있는 트리거나 이벤트를 사용하여 데이터가 변경될 때 캐시를 업데이트하거나 삭제하는 방법이 있습니다. 예를 들어, DB 트리거를 사용하여 데이터 변경 시 외부 서비스를 호출하여 캐시를 업데이트할 수 있습니다.</li>
+  <li><strong>캐시 무효화 (Cache Invalidation)</strong>: 데이터가 변경될 때마다 관련된 캐시를 수동으로 무효화하는 방법입니다. 예를 들어, 사용자 정보를 수정하는 서비스가 있다면, 해당 서비스 로직 내에서 관련된 캐시 데이터를 삭제하거나 업데이트 합니다.</li>
+</ol>
+
+<p>여러가지 방법 중, 업브렐라 개발팀은 캐시 무효화 방법을 통해 캐시를 관리하도록 결정하였습니다.</p>
+
+<h2 id="4-캐시-적용">4. 캐시 적용</h2>
+
+<h3 id="4---1-조회-service에-캐시-적용">4 - 1. 조회 Service에 캐시 적용</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@Transactional</span>
+    <span class="nd">@Cacheable</span><span class="o">(</span><span class="n">value</span> <span class="o">=</span> <span class="s">"stores"</span><span class="o">,</span> <span class="n">key</span> <span class="o">=</span> <span class="s">"'allStores'"</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">SingleStoreResponse</span><span class="o">&gt;</span> <span class="nf">findAllStores</span><span class="o">()</span> <span class="o">{</span>
+
+        <span class="nc">List</span><span class="o">&lt;</span><span class="nc">StoreDetail</span><span class="o">&gt;</span> <span class="n">storeDetails</span> <span class="o">=</span> <span class="n">storeDetailRepository</span><span class="o">.</span><span class="na">findAllStores</span><span class="o">();</span>
+        <span class="k">return</span> <span class="n">storeDetails</span><span class="o">.</span><span class="na">stream</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">map</span><span class="o">(</span><span class="k">this</span><span class="o">::</span><span class="n">createSingleStoreResponse</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">collect</span><span class="o">(</span><span class="nc">Collectors</span><span class="o">.</span><span class="na">toList</span><span class="o">());</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>@Cacheable 어노테이션을 사용해서 필요한 데이터에 캐시를 적용할 수 있습니다.</p>
+
+<p><img width="921" alt="스크린샷 2023-09-26 오후 6 04 08" src="https://user-images.githubusercontent.com/115435784/270600748-d00b5d34-968c-4206-bd4c-4ac50f3f981d.png" />
+(주의: redis는 싱글 스레드이기 때문에 keys 명령어 처럼 O(n) 시간복잡도를 가진 명령어는 실행하지 않는 것이 좋습니다.)</p>
+
+<p>key : stores</p>
+
+<p>value : allStores</p>
+
+<p>session에 적용된 모습을 확인할 수 있습니다.</p>
+
+<h3 id="4---2-cud-캐시-무효화-설정">4 - 2. CUD 캐시 무효화 설정</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@Transactional</span>
+    <span class="nd">@CacheEvict</span><span class="o">(</span><span class="n">value</span> <span class="o">=</span> <span class="s">"stores"</span><span class="o">,</span> <span class="n">key</span> <span class="o">=</span> <span class="s">"'allStores'"</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">deleteStoreMeta</span><span class="o">(</span><span class="kt">long</span> <span class="n">storeMetaId</span><span class="o">)</span> <span class="o">{</span>
+
+        <span class="n">findStoreMetaById</span><span class="o">(</span><span class="n">storeMetaId</span><span class="o">).</span><span class="na">delete</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>@CacheEvict 어노테이션을 통해 적용된 캐시를 무효화 합니다.</p>
+
+<p><img width="897" alt="스크린샷 2023-09-26 오후 6 03 54" src="https://user-images.githubusercontent.com/115435784/270601000-7fbb9e6e-3869-489d-81dd-859a8d508c0d.png" /></p>
+
+<p>@CacheEvict 를 통해 stores:allStores 가 삭제된 것을 확인할 수 있습니다.</p>
+
+<h2 id="5-성능-비교">5. 성능 비교</h2>
+
+<p><strong>Cache 적용 전</strong><br />
+<img width="1244" alt="before cache" src="https://user-images.githubusercontent.com/115435784/270360332-e290c895-7e28-4361-8a36-4be2b2b811a8.png" /></p>
+
+<p>vUser 50을 기준으로 평균 TPS는 117.1이었습니다.</p>
+
+<p><strong>Cache 적용 후</strong><br />
+<img width="1248" alt="after cache" src="https://user-images.githubusercontent.com/115435784/270360450-3da9a727-8065-4e9b-bdc0-67c2945192f6.png" /></p>
+
+<p>동일한 조건에서 캐시를 적용해보니, 평균 TPS 2386.1로 상승한 것을 확인할 수 있습니다.</p>
+
+<p>TPS를 비교해보면, 117 TPS -&gt; 2386 TPS로 1943.59%의 성능 향상이 이루어졌습니다.</p>
+
+<h2 id="6-sequence-diagram-비교">6. Sequence Diagram 비교</h2>
+
+<p>어떻게 API 흐름이 변경되었는지 Sequence Diagram을 통해 알아보도록 하겠습니다.</p>
+
+<p><strong>Cache 적용 이전</strong><br />
+<img width="412" alt="스크린샷 2023-09-26 오후 5 55 54" src="https://user-images.githubusercontent.com/115435784/270597901-98dbde0f-d415-4279-9fba-7f098383d014.png" /></p>
+
+<p>서버에서 조회가 일어날 때마다 같은 데이터를 반환할 수 있음에도 불구하고, 매번 DB에 접근하며 부하를 일으키게 됩니다.</p>
+
+<p><strong>Cache 적용 이후(Cache Hit)</strong><br />
+<img width="479" alt="스크린샷 2023-09-26 오후 5 55 33" src="https://user-images.githubusercontent.com/115435784/270597770-29bcd8e7-86d8-49a3-a7b2-56264150b138.png" /></p>
+
+<p>이렇게 Cache에 저장된 데이터가 있다면, DB에 접근하지 않고도 훨씬 빠른 속도로 데이터를 응답할 수 있게 됩니다.</p>
+
+<p>만약 캐싱된 데이터가 없다면 어떻게 될까요?</p>
+
+<p><strong>Cache Miss</strong></p>
+
+<p><img width="475" alt="스크린샷 2023-09-26 오후 5 55 03" src="https://user-images.githubusercontent.com/115435784/270597641-1e03abe1-b08f-42d2-b49b-d042dd8ee1a4.png" /></p>
+
+<p>이처럼 캐시가 없을 경우 DB를 조회한 후 다시 캐싱해주는 과정을 거치게 됩니다.</p>
+
+<p>Cache Miss가 발생할 경우 이처럼 Sequence가 복잡해질 수 있고, 자주 사용되지 않는 데이터를 캐싱할 경우 리소스 낭비가 될 수 있기 때문에, 데이터 변경이 자주 일어나지 않고, 조회를 많이 하는 데이터만 캐싱하는 것이 성능상 유리합니다.</p>
+
+<h2 id="7-마무리">7. 마무리</h2>
+
+<p>이번 포스팅을 통해 DB에 캐시를 적용하는 방법을 알아보았습니다.</p>
+
+<p>DB 데이터를 적절하게 캐싱한다면 API 성능을 더욱 끌어올릴 수 있을 것입니다.</p>]]></content><author><name>임동현</name></author><category term="Redis" /><category term="Redis" /><summary type="html"><![CDATA[1. 문제 정의]]></summary></entry><entry><title type="html">Loki를 통한 로그 모니터링</title><link href="https://upbrella.github.io/jekyll-theme-yat/log/2023/09/21/Logging.html" rel="alternate" type="text/html" title="Loki를 통한 로그 모니터링" /><published>2023-09-21T15:00:00+00:00</published><updated>2023-09-21T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/log/2023/09/21/Logging</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/log/2023/09/21/Logging.html"><![CDATA[<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>업브렐라 서버팀은 ELK를 사용하여 로그 모니터링을 하려고 했습니다. 하지만 무거운 ELK를 감당하기에는 서버 비용이 부담이 들었고, 비교적 가볍게 실행할 수 있는 Grafana를 로그 모니터링 툴로 선택하게 되었습니다.</p>
+
+<h2 id="2-grafana">2. Grafana</h2>
+
+<h3 id="2---1-grafana란">2 - 1 Grafana란?</h3>
+
+<p>Grafana는 오픈 소스로 제공되는 대시보드 및 시각화 플랫폼입니다.</p>
+
+<p>이번 포스팅을 통해 Loki와 Promtail로 수집한 데이터를 Grafana로 시각화하는 방법에 대해서 알아보겠습니다.</p>
+
+<h3 id="2---2-grafana-설치">2 - 2 Grafana 설치</h3>
+
+<p>wget으로 Grafana를 다운받고, 압축을 해제해줍니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wget https://dl.grafana.com/enterprise/release/grafana-enterprise-10.1.2.linux-amd64.tar.gz
+tar -zxvf grafana-enterprise-10.1.2.linux-amd64.tar.gz
+</code></pre></div></div>
+
+<p>압축 해제된 grafana/bin/ 들어가보면 grafana-server가 있는 것을 볼 수 있습니다.
+<img src="https://user-images.githubusercontent.com/115435784/269812960-5f012b77-3676-4b2c-8c26-3209965c0030.png" alt="image" /></p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>./grafana-server
+</code></pre></div></div>
+
+<p>하지만 위와 같이 실행하게 되면 terminal이 종료될 시 grafana도 종료됩니다.</p>
+
+<p>따라서 Systemd 서비스 유닛 파일을 작성하고 이를 활용하여 Grafana를 관리할 필요가 있습니다.</p>
+
+<ol>
+  <li>systemd 서비스 파일 생성</li>
+</ol>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo nano /etc/systemd/system/grafana-custom.service
+</code></pre></div></div>
+
+<ol>
+  <li>아래 내용을 파일에 입력</li>
+</ol>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[Unit]
+Description=Grafana
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/grafana-10.1.2
+ExecStart=/home/ubuntu/grafana-10.1.2/bin/grafana-server
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+</code></pre></div></div>
+
+<ol>
+  <li>서비스 파일 권한 설정 후 데몬 리로드</li>
+</ol>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo chmod 644 /etc/systemd/system/grafana-custom.service
+sudo systemctl daemon-reload
+</code></pre></div></div>
+
+<ol>
+  <li>Grafana 시작</li>
+</ol>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo systemctl start grafana-custom
+</code></pre></div></div>
+
+<ol>
+  <li>시스템 부팅 시 자동 시작 설정</li>
+</ol>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo systemctl enable grafana-custom
+</code></pre></div></div>
+
+<ol>
+  <li>그라파나 실행 확인</li>
+</ol>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo systemctl status grafana-custom
+</code></pre></div></div>
+
+<p>3000 포트로 접속하면 그라파나가 활성화된 것을 볼 수 있습니다.
+<img src="https://user-images.githubusercontent.com/115435784/269813011-53cd32db-0142-43ef-b538-47ef65a9bb76.png" alt="image" /></p>
+
+<h2 id="3-loki">3. Loki</h2>
+
+<h3 id="3---1-loki란">3 - 1 Loki란</h3>
+
+<p>Loki는 Grafana에서 제공하는 오픈소스 기반의 로그 집계 서비스입니다.</p>
+
+<p>Promtail과 함께 사용해서 로그를 수집하고 Grafana로 로그를 보여줄 수 있습니다.</p>
+
+<h3 id="3---2-loki-설치">3 - 2 Loki 설치</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wget https://github.com/grafana/loki/releases/download/v2.9.1/loki-linux-amd64.zip
+wget https://github.com/grafana/loki/releases/download/v2.9.1/promtail-linux-amd64.zip
+</code></pre></div></div>
+
+<p>Loki를 사용하기 위해서는 로그를 Loki로 보내주는 Promtail도 같이 설치해야 합니다.</p>
+
+<p>설정 파일을 다시 받아줍니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wget https://raw.githubusercontent.com/grafana/loki/master/cmd/loki/loki-local-config.yaml
+wget https://raw.githubusercontent.com/grafana/loki/main/clients/cmd/promtail/promtail-local-config.yaml
+</code></pre></div></div>
+
+<ul>
+  <li>이제 Promtail 설정을 추가로 해주어야 합니다.</li>
+</ul>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# promtail이 꺼졌을 경우를 대비해서, 로그를 마지막으로 어디까지 읽었는지 저장해둡니다. 
+positions:
+  filename: /tmp/positions.yaml
+
+# 로키가 실행중인 서버의 ip 
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+- job_name: system
+  static_configs:
+	# promtail이 설치된 곳 
+  - targets:
+      - localhost
+    labels:
+      job: was-log
+			# 로그의 경로 
+      __path__: /home/ubuntu/be-log/*.log
+</code></pre></div></div>
+
+<p>설정을 마친 후 Loki 와 Promtail을 실행합니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kill -9 $(lsof -t -i:3100) || true
+nohup /home/ubuntu/loki/loki-linux-amd64 -config.file=/home/ubuntu/loki/loki-local-config.yaml 2&gt;&amp;1 &amp;
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>nohup /home/ubuntu/promtail/promtail-linux-amd64 \
+-config.file=/home/ubuntu/promtail/promtail-local-config.yaml \
+&gt; /home/ubuntu/promtail/promtail.log 2&gt;&amp;1 &amp;
+</code></pre></div></div>
+
+<h2 id="4-dashboard-설정">4. Dashboard 설정</h2>
+
+<h3 id="4---1-loki-설정">4 - 1 Loki 설정</h3>
+
+<ol>
+  <li>
+    <p>Grafana를 설치한 ip :3000 으로 그라파나에 접속해줍니다.</p>
+  </li>
+  <li>
+    <p>Connection 에서 Loki를 선택해줍니다.
+<img src="https://user-images.githubusercontent.com/115435784/269813308-6c26f2d7-3eed-4aab-9abc-5ad8055235ba.png" alt="image" /></p>
+  </li>
+</ol>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/269813409-73845923-8341-4119-814d-1b655495304c.png" alt="image" /></p>
+
+<p>URL 에 서버의 IP와 3100 포트를 적고 save &amp; test 를 클릭하면 됩니다.</p>
+
+<h3 id="4---2-dashboard-설정">4 - 2 Dashboard 설정</h3>
+
+<ol>
+  <li>
+    <p>Dashboard에 들어간 후 New Dashboard - Add visualization - Loki 를 선택해줍니다.</p>
+  </li>
+  <li>
+    <p>Label Filter 에서 promtail config 에서 설정한 label을 선택해줍니다.</p>
+  </li>
+</ol>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/269813575-67a7222e-c951-4387-a4e0-24ddc6788ae1.png" alt="image" /></p>
+
+<ol>
+  <li>save를 하게 되면 log를 Dashboard에서 확인할 수 있습니다.</li>
+</ol>
+
+<h2 id="5-마무리">5. 마무리</h2>
+
+<p>이번 포스팅을 통해 Grafana와 Loki를 이용해서 로그를 확인하는 방법에 대해 알아보았습니다.</p>
+
+<p>다음 포스팅에서는 slack 알림봇과 연동해서 500에러가 발생했을 때 알림이 가도록 서비스를 구축해보도록 하겠습니다.</p>]]></content><author><name>임동현</name></author><category term="Log" /><category term="Grafana" /><summary type="html"><![CDATA[1. 문제 정의]]></summary></entry><entry><title type="html">nGrinder 자동화</title><link href="https://upbrella.github.io/jekyll-theme-yat/ngrinder/2023/09/20/nGrinder-auto.html" rel="alternate" type="text/html" title="nGrinder 자동화" /><published>2023-09-20T15:00:00+00:00</published><updated>2023-09-20T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/ngrinder/2023/09/20/nGrinder-auto</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/ngrinder/2023/09/20/nGrinder-auto.html"><![CDATA[<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>nGrinder를 사용해서 부하테스트를 하는 이유는 지난 게시글를 통해 알아보았습니다.</p>
+
+<p>하지만 매번 배포를 할때마다 개발자가 nGrinder 서버를 띄워서 테스트 하는건 자원의 낭비라고 생각해서 자동화하기로 결정하였습니다.</p>
+
+<h2 id="2-ngrinder-자동화-도입">2. nGrinder 자동화 도입</h2>
+
+<h3 id="2-1-설정하기">2-1 설정하기</h3>
+
+<p>java 11 과 docker가 설치되었다고 가정하고 진행하겠습니다.</p>
+
+<p>도커로 ngrinder를 pull 하고 실행해줍니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo docker pull ngrinder/controller:3.5.5-p1
+</code></pre></div></div>
+
+<p>latest 버전이 아닌 3.5.5-p1을 명시해준 이유는 3.5.6 이상부터는 Script Error가 발생하고,</p>
+
+<p>3.5.4 이하 버전은 agent Error가 빈번히 발생하여서 선택하였습니다.</p>
+
+<p>https://github.com/naver/ngrinder/issues/940</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo docker run -d -p 80:80 ngrinder/controller:3.5.5-p1
+</code></pre></div></div>
+
+<p>ec2의 public ip로 접속해보면 ngrinder가 실행중인 것을 볼 수 있습니다.</p>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/269597182-24acbe9c-8b03-4dfc-a607-b3f1e1539204.png" alt="image" /></p>
+
+<p>이제 controller의 쉡 스크립트를 작성해보겠습니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#!/bin/bash
+export EC2_SERVER_IP=52.79.180.25
+source ~/.bashrc
+sudo systemctl restart docker
+sudo docker rm $(sudo docker ps -a -q)
+sudo docker run -d -e EC2_SERVER_IP=$EC2_SERVER_IP -v ~/ngrinder-controller:/opt/ngrinder-controller -p 80:80 -p 16001:16001 -p 12000-12009:12000-12009 ngrinder/controller:3.5.5-p1
+</code></pre></div></div>
+
+<ul>
+  <li>쉘 스크립트 설명
+    <ol>
+      <li><strong><code class="language-plaintext highlighter-rouge">#!/bin/bash</code></strong>
+        <ul>
+          <li>이 줄은 스크립트가 Bash 쉘을 사용하여 실행되어야 함을 지정합니다.</li>
+        </ul>
+      </li>
+      <li><strong><code class="language-plaintext highlighter-rouge">source ~/.bashrc</code></strong>
+        <ul>
+          <li>사용자의 <strong><code class="language-plaintext highlighter-rouge">.bashrc</code></strong> 파일을 소스화하여, 해당 파일에 정의된 환경 변수와 함수를 현재 쉘 세션에 로드합니다.</li>
+        </ul>
+      </li>
+      <li><strong><code class="language-plaintext highlighter-rouge">sudo systemctl restart docker</code></strong>
+        <ul>
+          <li><strong><code class="language-plaintext highlighter-rouge">sudo</code></strong> 권한을 사용하여 Docker 시스템 서비스를 재시작합니다.</li>
+        </ul>
+      </li>
+      <li><strong><code class="language-plaintext highlighter-rouge">sudo docker rm $(sudo docker ps -a -q)</code></strong>
+        <ul>
+          <li>현재 모든 Docker 컨테이너의 ID를 가져와(<strong><code class="language-plaintext highlighter-rouge">sudo docker ps -a -q</code></strong>) 이를 사용하여 모든 Docker 컨테이너를 삭제합니다(<strong><code class="language-plaintext highlighter-rouge">sudo docker rm</code></strong>).</li>
+        </ul>
+      </li>
+      <li><strong><code class="language-plaintext highlighter-rouge">sudo docker run -d -e EC2_SERVER_IP=$EC2_SERVER_IP -v ~/ngrinder-controller:/opt/ngrinder-controller -p 80:80 -p 16001:16001 -p 12000-12009:12000-12009 ngrinder/controller</code></strong>
+        <ul>
+          <li><strong><code class="language-plaintext highlighter-rouge">sudo</code></strong> 권한으로 새 Docker 컨테이너를 실행합니다. 여기에서 사용하는 옵션은 다음과 같습니다:</li>
+        </ul>
+        <ul>
+          <li><strong><code class="language-plaintext highlighter-rouge">d</code></strong>: Docker 컨테이너를 백그라운드에서 실행합니다 (데몬 모드).</li>
+          <li><strong><code class="language-plaintext highlighter-rouge">e EC2_SERVER_IP=$EC2_SERVER_IP</code></strong>: <strong><code class="language-plaintext highlighter-rouge">EC2_SERVER_IP</code></strong> 환경 변수를 컨테이너 내부의 환경 변수로 설정합니다. <strong><code class="language-plaintext highlighter-rouge">EC2_SERVER_IP</code></strong>는 스크립트 실행 전에 쉘 환경에 설정되어 있어야 합니다.</li>
+          <li><strong><code class="language-plaintext highlighter-rouge">v ~/ngrinder-controller:/opt/ngrinder-controller</code></strong>: 호스트 시스템의 <strong><code class="language-plaintext highlighter-rouge">~/ngrinder-controller</code></strong> 디렉터리를 컨테이너의 <strong><code class="language-plaintext highlighter-rouge">/opt/ngrinder-controller</code></strong>에 마운트합니다.</li>
+          <li><strong><code class="language-plaintext highlighter-rouge">p 80:80</code></strong>: 호스트 시스템의 80번 포트를 컨테이너의 80번 포트에 매핑합니다.</li>
+          <li><strong><code class="language-plaintext highlighter-rouge">p 16001:16001</code></strong>: 호스트 시스템의 16001번 포트를 컨테이너의 16001번 포트에 매핑합니다.</li>
+          <li><strong><code class="language-plaintext highlighter-rouge">p 12000-12009:12000-12009</code></strong>: 호스트 시스템의 12000번에서 12009번 포트를 컨테이너의 동일한 포트 범위에 매핑합니다.</li>
+          <li><strong><code class="language-plaintext highlighter-rouge">ngrinder/controller</code></strong>: 사용할 Docker 이미지를 지정합니다.</li>
+        </ul>
+      </li>
+    </ol>
+  </li>
+</ul>
+
+<p>agent 설치</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo docker pull ngrinder/agent:3.5.5-p1
+</code></pre></div></div>
+
+<p>agent도 controller와 동일한 이유로 3.5.5-p1을 선택하였습니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#!/bin/bash
+source ~/.bashrc
+export CONTROLLER_IP=52.79.180.25
+sudo systemctl restart docker
+sudo docker rm $(sudo docker ps -a -q)
+sudo docker run -v ~/ngrinder-agent:/opt/ngrinder-agent -d ngrinder/agent:3.5.5-p1 $CONTROLLER_IP:80
+</code></pre></div></div>
+
+<p>agent를 실행한 후 agent 관리로 들어가면 agent가 등록된 것을 확인할 수 있습니다.</p>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/269597308-1897261e-2ea7-4452-b747-c840dd3990f9.png" alt="image" /></p>
+
+<ul>
+  <li>nGrinder controller 와 agent 분리 이유
+    <ol>
+      <li><strong>리소스 경쟁</strong>: <strong><code class="language-plaintext highlighter-rouge">controller</code></strong>와 <strong><code class="language-plaintext highlighter-rouge">agent</code></strong>가 같은 시스템 리소스(예: CPU, 메모리)를 사용하므로, 특히 테스트 중에 성능 저하가 발생할 수 있습니다.</li>
+      <li><strong>고장 격리</strong>: <strong><code class="language-plaintext highlighter-rouge">controller</code></strong> 또는 <strong><code class="language-plaintext highlighter-rouge">agent</code></strong> 중 하나에 문제가 발생하면, 다른 컴포넌트도 영향을 받을 수 있습니다. 두 컴포넌트를 분리하여 실행하면, 하나의 컴포넌트에 문제가 발생해도 다른 컴포넌트에는 영향을 미치지 않습니다.</li>
+    </ol>
+  </li>
+</ul>
+
+<h3 id="2---2-github-action">2 - 2 GitHub Action</h3>
+
+<p>upbrella 개발팀은 dev 서버는 code deploy를 활용해서 배포하고 있습니다.</p>
+
+<p>nGrinder에 대한 설명은 CodeDeploy 이후 부분부터 입니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>name: Upbrella DEV CI
+
+on:
+  push:
+    branches: [ "release-dev" ]
+
+env:
+  WORKING_DIRECTORY: ./
+  CODE_DEPLOY_APPLICATION_NAME: upbrella-dev-deploy
+  CODE_DEPLOY_DEPLOYMENT_GROUP_NAME: UpbrellaServerDev
+  S3_BUCKET_NAME: upbrella-storage
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+
+      - name: Set application properties
+        run: |
+          touch src/main/resources/application.properties
+          echo "$" &gt; src/main/resources/application.properties
+          echo "$" &gt; src/test/resources/application.properties
+
+      - name: Build with Gradle
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build
+        env:
+          WORKING_DIRECTORY: $
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: $
+          aws-secret-access-key: $
+          aws-region: $
+
+      - name: Make zip file
+        run: zip -r ./$GITHUB_SHA.zip .
+        shell: bash
+
+      - name: Upload to S3
+        run:
+          aws s3 cp $GITHUB_SHA.zip s3://$/server-dev-deploy/$GITHUB_SHA.zip --region $
+
+      - name: Code Deploy
+        run: |
+          aws deploy create-deployment \
+          --deployment-config-name CodeDeployDefault.AllAtOnce \
+          --application-name $ \
+          --deployment-group-name $ \
+          --s3-location bucket=$,bundleType=zip,key=server-dev-deploy/$GITHUB_SHA.zip
+
+			# 여기서부터 nGrinder 설정입니다. 
+      # test에 필요한 ec2 인스턴스를 aws cli를 통해 실행
+      - name: Start nGrinder EC2 - (Controller, Agent)
+        run: aws ec2 start-instances --instance-ids $ $
+        env:
+          AWS_ACCESS_KEY_ID: $
+          AWS_SECRET_ACCESS_KEY: $
+          AWS_DEFAULT_REGION: $
+
+      # Dev server 완전히 실행될 때까지 기다림
+      - name: Sleep for 30 seconds - waiting controller,agent run
+        run: sleep 30s
+        shell: bash
+
+      # EC2- Ngrinder Controller를 실행
+      - name: nGrinder Controller Start
+        uses: appleboy/ssh-action@master
+        with:
+          host: $
+          username: ubuntu
+          key: $
+          script: |
+            bash ./controller.sh
+
+			# nGrinder Agent 실행
+      - name: nGrinder Agent Start
+        uses: appleboy/ssh-action@master
+        with:
+          host: $
+          username: ubuntu
+          key: $
+          script: |
+            bash ./agent.sh
+
+      - name: waiting controller,agent run
+        run: sleep 30s
+        shell: bash
+
+			# 업브렐라 서비스의 방문자 통계를 따라 최대 30명의 사용자가 동시접속한다고 가정하였습니다. 
+      - name: nGrinder Test
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: 'http://$/perftest/api'
+          method: 'POST'
+          username: $
+          password: $
+          customHeaders: '{"Content-Type": "application/json"}'
+          data: '{"param" : "$", "testName" : "upbrella-test", "tagString" : "upbrella-test", "description" : "upbrella-test", "scheduledTime" : "", "useRampUp": false, "rampUpType" : "PROCESS", "threshold" : "D", "scriptName" : "upbrella-test.groovy", "duration" : 240000, "runCount" : 1, "agentCount" : 1, "vuserPerAgent" : 30, "processes" : 2, "rampUpInitCount" : 0, "rampUpInitSleepTime" : 0, "rampUpStep" : 1, "rampUpIncrementInterval" : 1000, "threads": 15, "testComment" : "upbrella-test", "samplingInterval" : 2, "ignoreSampleCount" : 0, "status" : "READY"}'
+          timeout: '60000'
+
+      - name: waiting test for 300 seconds
+        run: sleep 300s
+        shell: bash
+
+      # Ngrinder Rest Api 를 통해 테스트 결과 조회
+      - name: Get nGrinder test result ...
+        uses: satak/webrequest-action@master
+        id: NgrinderTestResult
+        with:
+          url: 'http://$/perftest/api?page=0'
+          method: GET
+          username: $
+          password: $
+
+      - name: send test result to slack
+        uses: 8398a7/action-slack@v3
+        with:
+          text: '$'
+          status: $
+        env:
+          SLACK_WEBHOOK_URL: $
+        if: always() # Pick up events even if the job fails or is canceled.
+
+      - name: Stop Ngrinder EC2 - (Controller, Agent, Test Server)
+        run: aws ec2 stop-instances --instance-ids $ $
+        env:
+          AWS_ACCESS_KEY_ID: $
+          AWS_SECRET_ACCESS_KEY: $
+          AWS_DEFAULT_REGION: $
+</code></pre></div></div>
+
+<p>이제 배포가 완료되면 nGrinder를 위한 EC2 2대를 실행하고 부하테스트를 실행하게 되었습니다.</p>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/269597500-8a5890d6-8583-47c8-b4e5-ebadeaecc0d7.png" alt="image" /></p>
+
+<p>테스트의 결과는 Slack 알림을 통해서 받아볼 수 있도록 설정하였습니다.
+<img src="https://user-images.githubusercontent.com/115435784/269597560-eb15c332-9a31-42ef-9d12-1539093d334f.png" alt="image" /></p>
+
+<h2 id="3-마무리">3. 마무리</h2>
+
+<p>이번 게시글을 통해 nGrinder 자동화하는 방법에 대해서 알아보았습니다. 현재 플로우는 업브렐라 api중 복잡한 쿼리만을 테스트하고 있습니다.</p>
+
+<p>다음 게시글을 통해 실제 유저 플로우대로 진행하는 방법에 대해 알아보도록 하겠습니다.</p>]]></content><author><name>임동현</name></author><category term="nGrinder" /><category term="nGrinder" /><summary type="html"><![CDATA[1. 문제 정의]]></summary></entry><entry><title type="html">JPA Repository는 Entity만을 조회해야할까?</title><link href="https://upbrella.github.io/jekyll-theme-yat/jpa/2023/09/19/refactor-history.html" rel="alternate" type="text/html" title="JPA Repository는 Entity만을 조회해야할까?" /><published>2023-09-19T15:00:00+00:00</published><updated>2023-09-19T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/jpa/2023/09/19/refactor-history</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/jpa/2023/09/19/refactor-history.html"><![CDATA[<h2 id="1-문제-정의">1. 문제 정의</h2>
+<p>대여 기록을 관리하기 위해서는 여러 테이블과의 조인이 필요합니다. 
+문제는 여기서 발생하는데요, 기존의 업브렐라 개발팀은 개발 속도 및 편의를 위해 JPA Repository에서 Entity만 조회하였습니다.<br />
+하지만 이는 성능에 많은 영향을 미치고 있었습니다.</p>
+
+<h2 id="2-대여-기록-분석">2. 대여 기록 분석</h2>
+<p>대여 기록은 여러 테이블을 조인하는데 비해 적은 수의 데이터를 반환하고 있습니다. <br />
+코드를 먼저 살펴보겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">History</span><span class="o">&gt;</span> <span class="nf">findAll</span><span class="o">(</span><span class="nc">HistoryFilterRequest</span> <span class="n">filter</span><span class="o">,</span> <span class="nc">Pageable</span> <span class="n">pageable</span><span class="o">)</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">selectFrom</span><span class="o">(</span><span class="n">history</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">user</span><span class="o">,</span> <span class="n">user</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">leftJoin</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">refundedBy</span><span class="o">,</span> <span class="n">user</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">umbrella</span><span class="o">,</span> <span class="n">umbrella</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">rentStoreMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">leftJoin</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">returnStoreMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">).</span><span class="na">fetchJoin</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">filterRefunded</span><span class="o">(</span><span class="n">filter</span><span class="o">))</span>
+                <span class="o">.</span><span class="na">orderBy</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">id</span><span class="o">.</span><span class="na">desc</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">offset</span><span class="o">(</span><span class="n">pageable</span><span class="o">.</span><span class="na">getOffset</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">limit</span><span class="o">(</span><span class="n">pageable</span><span class="o">.</span><span class="na">getPageSize</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+<p>history를 한번에 조회하면서 연관된 Entity들을 fetchJoin으로 가져오고 있습니다.<br />
+이는 코드를 간편하게 작성할 수 있게 해주지만, 필요하지 않은 필드들까지 가져온다는 단점을 가지고 있습니다.</p>
+
+<p>이에 해당하는 쿼리는 다음과 같습니다.</p>
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_4_0_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_10_1_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_10_2_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_9_3_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">id1_8_5_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">account_number</span> <span class="k">as</span> <span class="n">account_2_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">bank</span> <span class="k">as</span> <span class="n">bank3_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">etc</span> <span class="k">as</span> <span class="n">etc4_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">paid_at</span> <span class="k">as</span> <span class="n">paid_at5_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">paid_by</span> <span class="k">as</span> <span class="n">paid_by9_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">refunded_at</span> <span class="k">as</span> <span class="n">refunded6_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">refunded_by</span> <span class="k">as</span> <span class="n">refunde10_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">rent_store_meta_id</span> <span class="k">as</span> <span class="n">rent_st11_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">rented_at</span> <span class="k">as</span> <span class="n">rented_a7_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">return_store_meta_id</span> <span class="k">as</span> <span class="n">return_12_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">returned_at</span> <span class="k">as</span> <span class="n">returned8_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">umbrella_id</span> <span class="k">as</span> <span class="n">umbrell13_4_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">user_id</span> <span class="k">as</span> <span class="n">user_id14_4_0_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">account_number</span> <span class="k">as</span> <span class="n">account_2_10_1_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">admin_status</span> <span class="k">as</span> <span class="n">admin_st3_10_1_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">bank</span> <span class="k">as</span> <span class="n">bank4_10_1_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">email</span> <span class="k">as</span> <span class="n">email5_10_1_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name6_10_1_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">phone_number</span> <span class="k">as</span> <span class="n">phone_nu7_10_1_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">social_id</span> <span class="k">as</span> <span class="n">social_i8_10_1_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">account_number</span> <span class="k">as</span> <span class="n">account_2_10_2_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">admin_status</span> <span class="k">as</span> <span class="n">admin_st3_10_2_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">bank</span> <span class="k">as</span> <span class="n">bank4_10_2_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">email</span> <span class="k">as</span> <span class="n">email5_10_2_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name6_10_2_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">phone_number</span> <span class="k">as</span> <span class="n">phone_nu7_10_2_</span><span class="p">,</span>
+        <span class="n">user2_</span><span class="p">.</span><span class="n">social_id</span> <span class="k">as</span> <span class="n">social_i8_10_2_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">created_at</span> <span class="k">as</span> <span class="n">created_2_9_3_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">deleted</span> <span class="k">as</span> <span class="n">deleted3_9_3_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">etc</span> <span class="k">as</span> <span class="n">etc4_9_3_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">missed</span> <span class="k">as</span> <span class="n">missed5_9_3_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">rentable</span> <span class="k">as</span> <span class="n">rentable6_9_3_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">store_meta_id</span> <span class="k">as</span> <span class="n">store_me8_9_3_</span><span class="p">,</span>
+        <span class="n">umbrella3_</span><span class="p">.</span><span class="n">uuid</span> <span class="k">as</span> <span class="n">uuid7_9_3_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">activated</span> <span class="k">as</span> <span class="n">activate2_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">category</span> <span class="k">as</span> <span class="n">category3_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">classification_id</span> <span class="k">as</span> <span class="n">classifi9_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">deleted</span> <span class="k">as</span> <span class="n">deleted4_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude5_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud6_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name7_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">password</span> <span class="k">as</span> <span class="n">password8_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">sub_classification_id</span> <span class="k">as</span> <span class="n">sub_cla10_8_4_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">activated</span> <span class="k">as</span> <span class="n">activate2_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">category</span> <span class="k">as</span> <span class="n">category3_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">classification_id</span> <span class="k">as</span> <span class="n">classifi9_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">deleted</span> <span class="k">as</span> <span class="n">deleted4_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">latitude</span> <span class="k">as</span> <span class="n">latitude5_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">longitude</span> <span class="k">as</span> <span class="n">longitud6_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">name7_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">password</span> <span class="k">as</span> <span class="n">password8_8_5_</span><span class="p">,</span>
+        <span class="n">storemeta5_</span><span class="p">.</span><span class="n">sub_classification_id</span> <span class="k">as</span> <span class="n">sub_cla10_8_5_</span> 
+    <span class="k">from</span>
+        <span class="n">history</span> <span class="n">history0_</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="k">user</span> <span class="n">user1_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">user_id</span><span class="o">=</span><span class="n">user1_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">left</span> <span class="k">outer</span> <span class="k">join</span>
+        <span class="k">user</span> <span class="n">user2_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">refunded_by</span><span class="o">=</span><span class="n">user2_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">umbrella</span> <span class="n">umbrella3_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">umbrella_id</span><span class="o">=</span><span class="n">umbrella3_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta4_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">rent_store_meta_id</span><span class="o">=</span><span class="n">storemeta4_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">left</span> <span class="k">outer</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta5_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">return_store_meta_id</span><span class="o">=</span><span class="n">storemeta5_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">order</span> <span class="k">by</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">id</span> <span class="k">desc</span>
+</code></pre></div></div>
+
+<p>실제로 필요한 필드는 12개인데 반해, 58개의 필드를 조회하고 있습니다.<br />
+이를 개선하기 위해 Entity 대신 DTO를 조회하도록 하겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">HistoryInfoDto</span><span class="o">&gt;</span> <span class="nf">findHistoryInfos</span><span class="o">(</span><span class="nc">HistoryFilterRequest</span> <span class="n">filter</span><span class="o">,</span> <span class="nc">Pageable</span> <span class="n">pageable</span><span class="o">)</span> <span class="o">{</span>
+
+        <span class="k">return</span> <span class="n">queryFactory</span>
+                <span class="o">.</span><span class="na">select</span><span class="o">(</span><span class="k">new</span> <span class="nc">QTestDto</span><span class="o">(</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">id</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">user</span><span class="o">.</span><span class="na">name</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">user</span><span class="o">.</span><span class="na">phoneNumber</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">rentStoreMeta</span><span class="o">.</span><span class="na">name</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">rentedAt</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">umbrella</span><span class="o">.</span><span class="na">uuid</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">returnStoreMeta</span><span class="o">.</span><span class="na">name</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">returnedAt</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">paidAt</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">bank</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">accountNumber</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">etc</span><span class="o">,</span>
+                        <span class="n">history</span><span class="o">.</span><span class="na">refundedAt</span>
+                <span class="o">))</span>
+                <span class="o">.</span><span class="na">from</span><span class="o">(</span><span class="n">history</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">user</span><span class="o">,</span> <span class="n">user</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">umbrella</span><span class="o">,</span> <span class="n">umbrella</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">rentStoreMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">leftJoin</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">returnStoreMeta</span><span class="o">,</span> <span class="n">storeMeta</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">where</span><span class="o">(</span><span class="n">filterRefunded</span><span class="o">(</span><span class="n">filter</span><span class="o">))</span>
+                <span class="o">.</span><span class="na">orderBy</span><span class="o">(</span><span class="n">history</span><span class="o">.</span><span class="na">id</span><span class="o">.</span><span class="na">desc</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">offset</span><span class="o">(</span><span class="n">pageable</span><span class="o">.</span><span class="na">getOffset</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">limit</span><span class="o">(</span><span class="n">pageable</span><span class="o">.</span><span class="na">getPageSize</span><span class="o">())</span>
+                <span class="o">.</span><span class="na">fetch</span><span class="o">();</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+<p>코드가 길어지긴 하였지만, SQL을 살펴보면 획기적으로 개선되었음을 알 수 있습니다.</p>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">select</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">id</span> <span class="k">as</span> <span class="n">col_0_0_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_1_0_</span><span class="p">,</span>
+        <span class="n">user1_</span><span class="p">.</span><span class="n">phone_number</span> <span class="k">as</span> <span class="n">col_2_0_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_3_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">rented_at</span> <span class="k">as</span> <span class="n">col_4_0_</span><span class="p">,</span>
+        <span class="n">umbrella2_</span><span class="p">.</span><span class="n">uuid</span> <span class="k">as</span> <span class="n">col_5_0_</span><span class="p">,</span>
+        <span class="n">storemeta4_</span><span class="p">.</span><span class="n">name</span> <span class="k">as</span> <span class="n">col_6_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">refunded_at</span> <span class="k">as</span> <span class="n">col_7_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">paid_at</span> <span class="k">as</span> <span class="n">col_8_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">bank</span> <span class="k">as</span> <span class="n">col_9_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">account_number</span> <span class="k">as</span> <span class="n">col_10_0_</span><span class="p">,</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">etc</span> <span class="k">as</span> <span class="n">col_11_0_</span> 
+    <span class="k">from</span>
+        <span class="n">history</span> <span class="n">history0_</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="k">user</span> <span class="n">user1_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">user_id</span><span class="o">=</span><span class="n">user1_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">umbrella</span> <span class="n">umbrella2_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">umbrella_id</span><span class="o">=</span><span class="n">umbrella2_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">inner</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta3_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">rent_store_meta_id</span><span class="o">=</span><span class="n">storemeta3_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">left</span> <span class="k">outer</span> <span class="k">join</span>
+        <span class="n">store_meta</span> <span class="n">storemeta4_</span> 
+            <span class="k">on</span> <span class="n">history0_</span><span class="p">.</span><span class="n">return_store_meta_id</span><span class="o">=</span><span class="n">storemeta4_</span><span class="p">.</span><span class="n">id</span> 
+    <span class="k">order</span> <span class="k">by</span>
+        <span class="n">history0_</span><span class="p">.</span><span class="n">id</span> <span class="k">desc</span> <span class="k">limit</span> <span class="o">?</span>
+</code></pre></div></div>
+
+<h2 id="3-쿼리-실행-계획-분석">3. 쿼리 실행 계획 분석</h2>
+<p><strong>개선 전</strong>
+<img src="https://user-images.githubusercontent.com/115435784/269452425-9774239a-9fc2-450d-b870-a636504dfa52.png" alt="image" /></p>
+
+<p><strong>개선 후</strong>
+<img src="https://user-images.githubusercontent.com/115435784/269452308-5960b9e5-62f4-486f-8632-17befaf18ced.png" alt="image" /></p>
+
+<p>JPA Repository에서 Entity만 조회했을 때와, DTO를 조회했을 때의 성능을 비교해보면,</p>
+
+<p>쿼리 속도는 0.032s -&gt; 0.012s 로 62.5% 개선되었고,<br />
+쿼리 비용은 6284054.81 -&gt; 5198930.47로 17.3% 개선되었습니다.</p>
+
+<h2 id="4-마치며">4. 마치며</h2>
+<p>이번 포스팅을 통해 JPA Repsitory에서 Entity를 조회하는 것이 성능에 미치는 영향을 알아보았습니다.<br />
+이처럼 Entity를 조회하는 경우 성능에 문제가 생길 수 있기 때문에, 실시간으로 Entity를 변경해야 하는 것이 아니라면, DTO를 조회하는 것이 성능에 좋은 영향을 미치게 됩니다.</p>]]></content><author><name>임동현</name></author><category term="JPA" /><category term="JPA" /><summary type="html"><![CDATA[1. 문제 정의 대여 기록을 관리하기 위해서는 여러 테이블과의 조인이 필요합니다. 문제는 여기서 발생하는데요, 기존의 업브렐라 개발팀은 개발 속도 및 편의를 위해 JPA Repository에서 Entity만 조회하였습니다. 하지만 이는 성능에 많은 영향을 미치고 있었습니다.]]></summary></entry><entry><title type="html">대용량 데이터 삽입</title><link href="https://upbrella.github.io/jekyll-theme-yat/mysql/2023/09/13/data-bulk-insert.html" rel="alternate" type="text/html" title="대용량 데이터 삽입" /><published>2023-09-13T15:00:00+00:00</published><updated>2023-09-13T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/mysql/2023/09/13/data-bulk-insert</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/mysql/2023/09/13/data-bulk-insert.html"><![CDATA[<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>데이터 베이스 성능을 개선하는 것은 품질 좋은 서버를 유지하기 위해서 필수적입니다.</p>
+
+<p>하지만 개발자들이 수작업으로 데이터를 삽입한 후 테스트 하는 것은 한계가 있습니다.</p>
+
+<p>따라서 업브렐라 개발팀은 Data Bulk Insert를 통해 DB에 대용량의 데이터를 삽입하고 성능 개선을 해보도록 하겠습니다.</p>
+
+<h2 id="2-bulk-insert">2. Bulk Insert</h2>
+
+<h3 id="2---1-데이터-만들기">2 - 1 데이터 만들기</h3>
+
+<p>우선 간단한 테이블인 협업지점 분류에 대한 데이터를 만들어보겠습니다.</p>
+
+<p>classification 테이블은 id, type, name, latitude, longitude를 필드로 가지고 있는데, 이에 해당하는 데이터를 만들어 보겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">private</span> <span class="kd">static</span> <span class="kt">void</span> <span class="nf">makeStoreMeta</span><span class="o">()</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">filePath</span> <span class="o">=</span> <span class="s">"store_meta.csv"</span><span class="o">;</span>
+        <span class="nc">Random</span> <span class="n">random</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Random</span><span class="o">();</span>
+
+        <span class="k">try</span> <span class="o">(</span><span class="nc">FileWriter</span> <span class="n">writer</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">FileWriter</span><span class="o">(</span><span class="n">filePath</span><span class="o">))</span> <span class="o">{</span>
+            <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"id,classification_id,sub_classification_id,activated,deleted,name,category,latitude,longitude,password"</span><span class="o">);</span>
+            <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"\n"</span><span class="o">);</span>
+
+            <span class="k">for</span> <span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="mi">1_000_000</span><span class="o">;</span> <span class="n">i</span><span class="o">++)</span> <span class="o">{</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="nc">Integer</span><span class="o">.</span><span class="na">toString</span><span class="o">(</span><span class="n">i</span><span class="o">));</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="nc">Long</span><span class="o">.</span><span class="na">toString</span><span class="o">(</span><span class="n">random</span><span class="o">.</span><span class="na">nextLong</span><span class="o">()</span> <span class="o">%</span> <span class="mi">1000</span><span class="o">));</span> <span class="c1">// classification_id</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="nc">Long</span><span class="o">.</span><span class="na">toString</span><span class="o">(</span><span class="n">random</span><span class="o">.</span><span class="na">nextLong</span><span class="o">()</span> <span class="o">%</span> <span class="mi">1000</span><span class="o">));</span> <span class="c1">// sub_classification_id</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="nc">Integer</span><span class="o">.</span><span class="na">toString</span><span class="o">(</span><span class="n">random</span><span class="o">.</span><span class="na">nextInt</span><span class="o">(</span><span class="mi">2</span><span class="o">)));</span> <span class="c1">// activated</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="nc">Integer</span><span class="o">.</span><span class="na">toString</span><span class="o">(</span><span class="n">random</span><span class="o">.</span><span class="na">nextInt</span><span class="o">(</span><span class="mi">2</span><span class="o">)));</span> <span class="c1">// deleted</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"Store_"</span> <span class="o">+</span> <span class="n">i</span><span class="o">);</span> <span class="c1">// name</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"Category_"</span> <span class="o">+</span> <span class="o">(</span><span class="n">random</span><span class="o">.</span><span class="na">nextInt</span><span class="o">(</span><span class="mi">10</span><span class="o">)</span> <span class="o">+</span> <span class="mi">1</span><span class="o">));</span> <span class="c1">// category</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="n">random</span><span class="o">.</span><span class="na">nextDouble</span><span class="o">()</span> <span class="o">*</span> <span class="mi">180</span> <span class="o">-</span> <span class="mi">90</span> <span class="o">+</span> <span class="s">""</span><span class="o">);</span> <span class="c1">// latitude</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="n">random</span><span class="o">.</span><span class="na">nextDouble</span><span class="o">()</span> <span class="o">*</span> <span class="mi">360</span> <span class="o">-</span> <span class="mi">180</span> <span class="o">+</span> <span class="s">""</span><span class="o">);</span> <span class="c1">// longitude</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">","</span><span class="o">);</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"Password_"</span> <span class="o">+</span> <span class="n">i</span><span class="o">);</span> <span class="c1">// password</span>
+                <span class="n">writer</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"\n"</span><span class="o">);</span>
+            <span class="o">}</span>
+        <span class="o">}</span> <span class="k">catch</span> <span class="o">(</span><span class="nc">IOException</span> <span class="n">e</span><span class="o">)</span> <span class="o">{</span>
+            <span class="n">e</span><span class="o">.</span><span class="na">printStackTrace</span><span class="o">();</span>
+        <span class="o">}</span>
+
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">"CSV file created successfully at: "</span> <span class="o">+</span> <span class="n">filePath</span><span class="o">);</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>위와 같이 FileWriter를 통해 백만건의 랜덤한 Classification을 생성하였습니다.</p>
+
+<h3 id="2---2-데이터-전송">2 - 2 데이터 전송</h3>
+
+<p>이와 같은 대용량의 데이터를 서버에서 직접 만들 경우, CPU 부족 현상으로 서버가 다운될 우려가 있어 데이터 생성은 로컬에서 진행하였습니다.</p>
+
+<p>이제 scp 명령어를 통해 데이터를 서버에 전송해주겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">scp</span> <span class="o">-</span><span class="n">p</span> <span class="n">classification</span><span class="o">.</span><span class="na">csv</span> <span class="n">ubuntu</span><span class="err">@</span><span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="o">:~/</span><span class="n">classification</span><span class="o">.</span><span class="na">csv</span>
+</code></pre></div></div>
+
+<p>127.0.0.1에 서버의 ip를 기입하면 전송을 완료할 수 있습니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>scp : 파일 전송 명령어  
+
+p : 작성, 수정한 날짜를 보존함  
+
+clsasification.csv 전송하려는 파일 명  
+
+ubuntu@127.0.0.1 : 서버의 사용자명과 서버의 ip  
+
+:~/classification.csv : 파일이 저장될 위치  
+</code></pre></div></div>
+<h3 id="2---3-mysql에-데이터-삽입">2 - 3 MySQL에 데이터 삽입</h3>
+
+<p>MySQL에서 파일을 Load해서 파일에 맞게 데이터를 INSERT 하기 위해서는 특정 위치에 해당 파일이 위치해야 합니다.</p>
+
+<p>파일을 MySQL이 읽을 수 있는 위치로 이동시켜 줍니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">sudo</span> <span class="n">mv</span> <span class="n">classification</span><span class="o">.</span><span class="na">csv</span> <span class="o">/</span><span class="kt">var</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">mysql</span><span class="o">-</span><span class="n">files</span><span class="o">/</span>
+</code></pre></div></div>
+
+<p>이제 파일을 이동시켰으니 데이터를 삽입해보도록 하겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">LOAD</span> <span class="no">DATA</span> <span class="no">INFILE</span> <span class="err">'</span><span class="o">/</span><span class="kt">var</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">mysql</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="n">classification</span><span class="o">.</span><span class="na">csv</span><span class="err">'</span> <span class="no">INTO</span> <span class="no">TABLE</span> <span class="n">classification</span>
+<span class="no">FIELDS</span> <span class="no">TERMINATED</span> <span class="no">BY</span> <span class="sc">','</span>
+<span class="no">LINES</span> <span class="no">TERMINATED</span> <span class="no">BY</span> <span class="sc">'\n'</span>
+<span class="no">IGNORE</span> <span class="mi">1</span> <span class="no">ROWS</span><span class="o">;</span>
+</code></pre></div></div>
+
+<p>csv 파일을 생성할 때, 맨 윗 줄에 필드에 대한 설명을 적었기 때문에 ignore 1 rows를 해줍니다.</p>
+
+<p>field 의 구분은 , 로 진행하고</p>
+
+<p>line의 구분은 \n 으로 진행해줍니다.</p>
+
+<h2 id="3-마치며">3 마치며</h2>
+
+<p>이번 게시글을 통해 대용량의 데이터를 삽입하는 방법을 알아보았습니다.</p>
+
+<p>다음 게시글에서는 대용량의 데이터를 통해 성능이 좋지 않은 API를 판별해보고 개선하는 방법에 대해 알아보겠습니다.</p>]]></content><author><name>임동현</name></author><category term="MySQL" /><category term="MySQL" /><summary type="html"><![CDATA[1. 문제 정의]]></summary></entry><entry><title type="html">nginx 리버스 프록시 설정</title><link href="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/30/nginx-reverse-proxy.html" rel="alternate" type="text/html" title="nginx 리버스 프록시 설정" /><published>2021-08-30T15:00:00+00:00</published><updated>2021-08-30T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/30/nginx-reverse-proxy</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/30/nginx-reverse-proxy.html"><![CDATA[<p>안녕하세요,
+업브렐라 팀의 백엔드 남권우입니다.</p>
+
+<h2 id="1-리버스-프록시란">1. 리버스 프록시란?</h2>
+
+<p>업브렐라는 React로 클라이언트 사이드 렌더링을 하고 있으며, 최종적으로 아래와 같은 인프라 구조를 갖추었습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-01.png" alt="absolute" /></p>
+
+<p>기존에는, 클라이언트 사이드 렌더링을 하기 때문에, 클라이언트에서 API 요청을 보낼 때, API 서버로 클라이언트에서 직접 요청을 보내는 구조였습니다.
+따라서 보안적인 취약점이 발생하였는데요, 이를 해결하기 위해 nginx를 이용한 리버스 프록시 설정을 하게 되었습니다.</p>
+
+<p>리버스 프록시란, 클라이언트와 서버 사이에서 중계기로서 동작하는 서버를 말합니다.
+클라이언트가 서버에 접속할 때, 클라이언트는 중계기에 접속하고 중계기가 서버에 접속하여 클라이언트와 서버를 연결시켜주는 역할을 합니다.</p>
+
+<p>이 뿐만 아니라 nginx로 리버스 프록시를 설정했을 때 많은 장점이 있어 소개하고자 합니다.</p>
+
+<h2 id="2-리버스-프록시의-장점">2. 리버스 프록시의 장점</h2>
+
+<h4 id="ssl-인증서-적용">SSL 인증서 적용</h4>
+
+<p>기존의 인프라 구조에서는, 클라이언트에서 API 요청을 보낼 때, API 서버로 클라이언트에서 직접 요청을 보내는 구조였기 때문에, API 서버에도 SSL 인증서를 적용해야 했습니다.
+API 서버에 인증서를 적용하지 않으면 <strong>mixed content</strong> 문제가 발생하였는데, nginx로 프록시 포워딩을 하면 같은 지점으로 트래픽이 진입하기 때문에 인증서를 맨 앞단의 로드밸런서에만 적용해주면 되었습니다.
+뿐만 아니라 로드밸런서에 적용하지 않더라도 nginx 자체에서 SSL 인증서를 적용할 수도 있다고 합니다.</p>
+
+<h4 id="로드-밸런싱">로드 밸런싱</h4>
+
+<p>nginx 자체에서도 로드 밸런싱을 지원합니다. 따라서 nginx를 이용한 리버스 프록시 설정을 하면, 로드 밸런싱을 적용할 수 있습니다.
+업브렐라에서는 ALB 2대를 운영하고 있기 때문에 nginx의 로드밸런싱 기능은 적용하지 않았습니다.</p>
+
+<h4 id="보안">보안</h4>
+
+<p>nginx를 거쳐 API 서버에 접속하기 때문에, API 서버의 IP를 외부에 노출시키지 않아 보안적인 측면에서도 좋습니다.</p>
+
+<h4 id="캐싱">캐싱</h4>
+
+<p>nginx는 캐싱 기능을 지원합니다. 따라서 nginx를 이용한 리버스 프록시 설정을 하면, 캐싱 기능을 적용할 수 있습니다.
+업브렐라는 redis 캐시 서버를 운영하고 있습니다. nginx에서 redis 옵션을 설정하면 연결된 redis에서 캐시를 설정하게 할 수 있습니다.</p>
+
+<h4 id="라우팅">라우팅</h4>
+
+<p>프록시 포워드가 가능하여, 요청 정보에 따라 API 서버로 보낼 것인지, 정적 리소스를 반환할 것인지 결정할 수 있습니다.</p>
+
+<h4 id="서버-성능-개선">서버 성능 개선</h4>
+
+<p>nginx는 비동기 이벤트 기반으로 동작하기 때문에, 서버의 성능을 개선할 수 있습니다.
+뿐만 아니라, 위에서 언급한 캐싱 기능을 적용하면, API 서버의 부하를 줄여 전체적인 인프라 성능 개선에 도움이 됩니다.</p>
+
+<h2 id="3-리버스-프록시-설정">3. 리버스 프록시 설정</h2>
+
+<p>nginx를 이용한 리버스 프록시 설정을 해보겠습니다.</p>
+
+<p>먼저, 도메인 이름을 기준으로 정적 리소스를 반환하도록 설정하였습니다.</p>
+
+<div class="language-nginx highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">server</span> <span class="p">{</span>
+    <span class="kn">listen</span> <span class="mi">80</span><span class="p">;</span>
+    <span class="kn">server_name</span> <span class="s">www.upbrella.co.kr</span> <span class="s">upbrella.co.kr</span><span class="p">;</span>
+
+    <span class="kn">access_log</span> <span class="n">/var/log/nginx/access.log</span><span class="p">;</span>
+    <span class="kn">error_log</span> <span class="n">/var/log/nginx/error.log</span><span class="p">;</span>
+    <span class="kn">location</span> <span class="n">/</span> <span class="p">{</span>
+
+        <span class="kn">root</span>   <span class="n">/usr/share/nginx/html</span><span class="p">;</span>
+        <span class="kn">index</span>  <span class="s">index.html</span> <span class="s">index.htm</span><span class="p">;</span>
+        <span class="kn">try_files</span> <span class="nv">$uri</span> <span class="nv">$uri</span><span class="n">/</span> <span class="n">/index.html</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>만약 도메인 이름을 기준으로 API 서버로 요청을 보내고 싶다면, 다음과 같이 설정하면 됩니다.</p>
+
+<div class="language-nginx highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">server</span> <span class="p">{</span>
+    <span class="kn">listen</span> <span class="mi">80</span><span class="p">;</span>
+    <span class="kn">server_name</span> <span class="s">api.upbrella.co.kr</span><span class="p">;</span>
+
+    <span class="c1"># 로그 설정</span>
+    <span class="kn">access_log</span> <span class="n">/var/log/nginx/access_api.log</span><span class="p">;</span>
+    <span class="kn">error_log</span> <span class="n">/var/log/nginx/error_api.log</span><span class="p">;</span>
+    
+    <span class="kn">location</span> <span class="n">/</span> <span class="p">{</span>
+        <span class="c1"># 로드 밸런서로 요청 전달</span>
+        <span class="kn">proxy_pass</span> <span class="p">;</span>
+        
+        <span class="c1"># Host 헤더를 설정합니다.</span>
+        <span class="kn">proxy_set_header</span> <span class="s">Host</span> <span class="nv">$host</span><span class="p">;</span>
+        
+        <span class="c1"># nginx에서 프록시 된 요청임을 나타냅니다.</span>
+        <span class="kn">proxy_set_header</span> <span class="s">X-Nginx-Proxy</span> <span class="s">true</span><span class="p">;</span>
+        
+        <span class="c1"># 실제 클라이언트의 IP를 기록하는 헤더</span>
+        <span class="kn">proxy_set_header</span> <span class="s">X-Real-IP</span> <span class="nv">$remote_addr</span><span class="p">;</span>
+        
+        <span class="c1"># 다중으로 Proxy되는 경우 실제 IP를 기록하는 헤더</span>
+        <span class="kn">proxy_set_header</span> <span class="s">X-Forwarded-For</span> <span class="nv">$proxy_add_x_forwarded_for</span><span class="p">;</span>
+        
+        <span class="c1"># 캐시 옵션을 설정합니다.</span>
+        <span class="kn">add_header</span> <span class="s">'Cache-Control'</span> <span class="s">'no-store,</span> <span class="s">no-cache,</span> <span class="s">must-revalidate,</span> <span class="s">proxy-revalidate,</span> <span class="s">max-age=0'</span><span class="p">;</span>
+        
+        <span class="kn">charset</span> <span class="s">utf-8</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>위의 설정을 통해, api.upbrella.co.kr로 요청을 보내면, nginx는 로드 밸런서에 요청을 보내고, 로드 밸런서는 API 서버로 요청을 보내게 됩니다.</p>
+
+<p>참고로, 위 옵션 중에서, <code class="language-plaintext highlighter-rouge">X-Real-IP</code> 헤더와 <code class="language-plaintext highlighter-rouge">X-Forwarded-For</code> 헤더가 있습니다.
+이는, nginx를 거쳐 API 서버로 요청이 전달되는 경우, API 서버에서는 nginx의 IP를 클라이언트의 IP로 인식하기 때문에, 실제 클라이언트의 IP를 기록하기 위해 설정하는 것입니다.
+<code class="language-plaintext highlighter-rouge">X-Forwarded-For</code>는 다중으로 프록시가 되는 경우, 실제 클라이언트의 IP를 기록하기 위해 설정하는 것입니다.
+클라이언트와 모든 중간 프록시 서버의 IP 주소를 컴마로 구분하여 나열한 목록을 가지고 있습니다.
+클라이언트의 IP 주소가 첫 번째로 오며, 그 뒤로는 요청이 거쳐간 각 프록시 서버의 IP 주소가 순서대로 나옵니다. 이를 통해 웹 서버는 요청이 어떤 경로를 거치며 왔는지를 파악할 수 있습니다.</p>
+
+<p>예를 들면, 다음 순서로 요청이 흘러간다고 생각해보겠습니다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>111.111.111.111(Client) -&gt;
+
+222.222.222.222(Proxy 1) -&gt;
+
+333.333.333.333(Proxy 2) -&gt;
+
+444.444.444.444(WAS) 
+</code></pre></div></div>
+<p>이 경우, WAS가 인식하는 IP는 최종 리버스 프록시인 333.333.333.333일 것입니다.
+그러나, <code class="language-plaintext highlighter-rouge">X-Forwarded-For</code>를 확인하면, 클라이언트부터 최종 프록시 까지의 IP 주소가 순서대로 나열된 111.111.111.111 222.222.222.222 333.333.333.333을 받게 됩니다.
+그리고, <code class="language-plaintext highlighter-rouge">X-Real-IP</code>에서는 최초의 Client IP인 111.111.111.111을 확인할 수 있습니다.</p>
+
+<p>이 외에도 nginx 설정은 다양합니다. 설정에 따라 성능적으로 큰 차이를 낼 수 있다고 하니, 지속적으로 모니터링하면서 최적화가 필요합니다.</p>
+
+<p><a href="https://nginx.org/en/docs/">nginx 문서</a>를 참고하시면 더 자세한 내용을 확인하실 수 있습니다.</p>]]></content><author><name>남권우</name></author><category term="Infrastructure" /><category term="Infrastructure" /><category term="nginx" /><summary type="html"><![CDATA[안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.]]></summary></entry><entry><title type="html">AWS 슬랙 배포 알림 파이프라인 구축하기</title><link href="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-alarm-bot.html" rel="alternate" type="text/html" title="AWS 슬랙 배포 알림 파이프라인 구축하기" /><published>2021-08-29T15:00:00+00:00</published><updated>2021-08-29T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-alarm-bot</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-alarm-bot.html"><![CDATA[<p>안녕하세요,
+업브렐라 팀의 백엔드 남권우입니다.</p>
+
+<p>이번 포스팅에서는 <a href="https://upbrella.github.io/infrastructure/2023/08/19/ECR-ECS-Infra.html">컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기</a>에서 구축한 인프라에 슬랙 알림을 도입하여 알림 파이프라인을 구축한 이야기입니다.</p>
+
+<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>인프라와 CI/CD 파이프라인을 구축하였지만 여전히 불편한 점이 있었습니다.</p>
+<ul>
+  <li>배포가 완료되어도 AWS에 접속하여 직접 완료 여부를 점검해야 했습니다.</li>
+  <li>배포가 완료되었음을 알리는 메시지를 팀원들에게 직접 공유해야 했습니다.</li>
+  <li>ECS가 갑작스럽게 종료되는 Event가 생겼을 때, 빠르게 팀원들에게 공유되는 알림이 필요했습니다.</li>
+</ul>
+
+<p>따라서 저희는 AWS 슬랙 배포 알림 시스템을 구축하기로 합니다.</p>
+
+<p>업브렐라 개발 CI/CD는 AWS CodeDeploy로 배포되며, 프로덕션의 경우 AWS ECS로 배포됩니다.
+따라서, 배포 서비스가 다르기 때문에 각각 알림 파이프라인을 다르게 구축해야했습니다.
+먼저, CodeDeploy의 경우부터 살펴보겠습니다.</p>
+
+<h2 id="2-codedeploy-알림">2. CodeDeploy 알림</h2>
+
+<p>CodeDeploy는 알림 규칙을 생성하여 쉽게 Slack으로 알림을 보낼 수 있습니다.</p>
+
+<p>알림을 메시지로 보내기 위해서는 AWS Chatbot과 Slack을 연동해야합니다.
+Slack 클라이언트를 생성해주고, 채널을 생성합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-02.png" alt="absolute" /></p>
+
+<p>그리고 적절한 권한을 가진 역할을 부여하면 됩니다. 알림 권한을 추가하면, Chatbot이 메시지를 전송할 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-03.png" alt="absolute" /></p>
+
+<p>챗봇을 생성했으면 CodeDeploy에서 알림 규칙을 생성하여, 챗봇을 통해 알림을 받을 수 있습니다.
+CodeDeploy &gt; 애플리케이션 &gt; 알림 규칙 &gt; 알림 규칙 생성을 통해 알림 규칙을 생성할 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-01.png" alt="absolute" /></p>
+
+<p>알림 트리거 이벤트를 목적에 맞게 선택하고, 아까 생성한 Chatbot을 선택합니다.</p>
+
+<p>마지막으로, Slack에서 선택한 채널에서 <code class="language-plaintext highlighter-rouge">/invite @AWS</code>로 AWS를 초대하면 알림을 받을 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-04.png" alt="absolute" /></p>
+
+<p>이렇게 간단하게 CodeDeploy 배포 완료 알림을 구축할 수 있습니다.</p>
+
+<h2 id="3-ecs-알림">3. ECS 알림</h2>
+
+<p>다음으로, ECS 알림 시스템을 구축해보겠습니다.
+ECS는 조금 더 복잡한데, 크게 아래의 흐름으로 동작합니다.</p>
+
+<ol>
+  <li><strong>AWS EventBridge</strong>는 AWS 리소스에서 발생하는 이벤트를 모니터링하고, 이벤트를 수신하는 대상을 정의할 수 있는 서비스입니다.</li>
+  <li>ECS를 모니터링하는 EventBridge의 <strong>규칙을 생성</strong>하고, ECS에서 배포의 상태가 변하는 이벤트가 발생한다면 AWS의 <strong>SNS 주제를 호출</strong>합니다.</li>
+  <li>SNS 주제는 AWS의 메시지 큐라고 볼 수 있습니다. <strong>SNS 주제를 구독하는 대상에게 메시지를 전송</strong>합니다.</li>
+  <li>AWS Chatbot이 SNS 주제를 구독하면, <strong>SNS 주제에 메시지가 전송되면 Chatbot이 Slack으로 메시지를 전송</strong>합니다.</li>
+</ol>
+
+<p>제일 먼저 SNS 주제를 만들어야합니다.</p>
+
+<p>AWS SNS &gt; 주제 &gt; 주제 생성을 통해 주제를 생성합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-05.png" alt="absolute" /></p>
+
+<p>그리고, 주제를 구독할 대상을 추가합니다. 아까 생성했던 Chatbot에 SNS 주제를 구독시킵니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-06.png" alt="absolute" /></p>
+
+<p>이제, EventBridge 규칙을 생성합니다.</p>
+
+<p>AWS EventBridge &gt; 규칙 &gt; 규칙 생성을 통해 규칙을 생성합니다.</p>
+
+<p>기본 이벤트 버스로 이벤트 패턴이 있는 규칙을 생성합니다.</p>
+
+<p>이벤트 패턴으로는 ECS의 배포 상태가 변하는 이벤트를 선택합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-07.png" alt="absolute" /></p>
+
+<p>마지막으로, SNS 주제를 호출하도록 설정합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-08.png" alt="absolute" /></p>
+
+<p>이렇게 설정하면 ECS도 배포 알림이 전송됩니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-09.png" alt="absolute" /></p>
+
+<h2 id="4-마무리">4. 마무리</h2>
+
+<p>이렇게 간단하게 AWS의 배포 알림 시스템을 구축할 수 있습니다.
+다음 포스팅에서는 서비스와 연동하여 주요 기능 알람을 Slack으로 보낼 수 있도록 슬랙 봇을 추가해보겠습니다.</p>]]></content><author><name>남권우</name></author><category term="Infrastructure" /><category term="Infrastructure" /><category term="AWS Cloud" /><category term="Slack" /><summary type="html"><![CDATA[안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.]]></summary></entry><entry><title type="html">슬랙 봇으로 서비스 알림 받기</title><link href="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-service-bot.html" rel="alternate" type="text/html" title="슬랙 봇으로 서비스 알림 받기" /><published>2021-08-29T15:00:00+00:00</published><updated>2021-08-29T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-service-bot</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-service-bot.html"><![CDATA[<p>안녕하세요,
+업브렐라 팀의 백엔드 남권우입니다.</p>
+
+<p>이번 포스팅에서는 <a href="https://upbrella.github.io/infrastructure/2021/08/29/slack-alarm-bot.html">AWS 슬랙 배포 알림 파이프라인 구축하기</a>에서 이어지는 내용으로, 슬랙 봇을 통해 서비스 알림을 받는 방법에 대해 알아보겠습니다.</p>
+
+<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>슬랙 봇을 도입하게 된 이야기에 앞서, 업브렐라 서비스에 대해서 설명해보겠습니다.
+업브렐라는 공유 우산 서비스로 사용자가 우산의 QR을 촬영하여 우산을 빌릴 수 있습니다.
+우산을 빌릴 때, 보증금 10,000원을 입금하며 14일 이내 반납 시 보증금을 돌려받을 수 있습니다.
+업브렐라는 결제 API를 사용할 수 없었기 때문에, 반납을 관리자가 수동으로 해야하는 시스템입니다.
+그러나 관리자가 반납 여부를 알림 받지 못하기 때문에 어드민 페이지를 계속 트래킹해야하는 불편함이 있었습니다.
+즉, 문제점은 다음과 같았습니다.</p>
+
+<ul>
+  <li>반납이 완료되었는지 실시간으로 알지 못합니다.</li>
+  <li>여러 명의 관리자에게 알림을 보내는 기능이 필요했습니다.</li>
+</ul>
+
+<p>이러한 문제점을 해결하기 위해, 반납이 완료되면 알림을 보내주는 슬랙 봇을 도입하게 되었습니다.</p>
+
+<h2 id="2-슬랙-봇-생성하기">2. 슬랙 봇 생성하기</h2>
+
+<p><a href="https://api.slack.com">Slack API</a>에서 우선 슬랙 App을 생성해야합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-10.png" alt="absolute" /></p>
+
+<p>App을 생성하고, App의 옵션은 원하는 옵션을 선택합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-13.png" alt="absolute" /></p>
+
+<p>간단한 자기소개도 작성해줍니다.</p>
+
+<p>슬랙 봇을 생성했으니, 서비스에서 이벤트가 발생하면 슬랙 봇의 Webhook URL로 전송하고, 이를 슬랙 봇이 지정 채널에 보내주는 방식으로 알림을 보낼 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-11.png" alt="absolute" /></p>
+
+<p>기능 추가에서 Incoming Webhook을 활성화해줍니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-14.png" alt="absolute" /></p>
+
+<p>Webhook을 생성하고, Add New Webhook to Workspace로 Webhook을 원하는 채널에 생성합니다.
+여기서 생성된 Webhook URL로 요청을 보내면 슬랙 봇이 지정한 채널로 메시지를 전송합니다.</p>
+
+<h2 id="3-서버에서-webhook으로-알림-보내기">3. 서버에서 Webhook으로 알림 보내기</h2>
+
+<p>이제 서버에서 Webhook으로 알림을 보내는 방법에 대해 알아보겠습니다.</p>
+
+<p>메시지를 생성하고, 위에서 생성한 Webhook URL으로 전송하면 됩니다. 간단한 프로토타입을 아래와 같이 구현했습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+<span class="nd">@Service</span>
+<span class="nd">@RequiredArgsConstructor</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">SlackAlarmService</span> <span class="o">{</span>
+    <span class="kd">private</span> <span class="kd">final</span> <span class="nc">SlackBotConfig</span> <span class="n">slackBotConfig</span><span class="o">;</span>
+    <span class="kd">private</span> <span class="kd">final</span> <span class="nc">RestTemplate</span> <span class="n">restTemplate</span><span class="o">;</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">notifyReturn</span><span class="o">(</span><span class="kt">long</span> <span class="n">unrefundedCount</span><span class="o">)</span> <span class="o">{</span>
+
+        <span class="nc">StringBuilder</span> <span class="n">sb</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">StringBuilder</span><span class="o">();</span>
+        <span class="n">sb</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"*우산이 반납되었습니다. 보증금을 환급해주세요.*\n\n"</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"*환급 대기 건수* : "</span><span class="o">)</span>
+                <span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="n">unrefundedCount</span><span class="o">);</span>
+
+        <span class="n">send</span><span class="o">(</span><span class="n">sb</span><span class="o">.</span><span class="na">toString</span><span class="o">());</span>
+    <span class="o">}</span>
+
+    <span class="kd">private</span> <span class="kt">void</span> <span class="nf">send</span><span class="o">(</span><span class="nc">String</span> <span class="n">message</span><span class="o">)</span> <span class="o">{</span>
+
+        <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">request</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+        <span class="n">request</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"text"</span><span class="o">,</span> <span class="n">message</span><span class="o">);</span>
+
+        <span class="nc">HttpEntity</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="n">entity</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HttpEntity</span><span class="o">&lt;&gt;(</span><span class="n">request</span><span class="o">);</span>
+
+        <span class="n">restTemplate</span><span class="o">.</span><span class="na">exchange</span><span class="o">(</span><span class="n">slackBotConfig</span><span class="o">.</span><span class="na">getWebHookUrl</span><span class="o">(),</span> <span class="no">POST</span><span class="o">,</span> <span class="n">entity</span><span class="o">,</span> <span class="nc">String</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>알림을 보내는 김에, 미환급 우산 개수까지 같이 세서 보내는 기능을 추가했습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@PatchMapping</span>
+    <span class="kd">public</span> <span class="nc">ResponseEntity</span><span class="o">&lt;</span><span class="nc">CustomResponse</span><span class="o">&gt;</span> <span class="nf">returnUmbrellaByUser</span><span class="o">(</span><span class="nd">@RequestBody</span> <span class="nc">ReturnUmbrellaByUserRequest</span> <span class="n">returnUmbrellaByUserRequest</span><span class="o">,</span> <span class="nc">HttpSession</span> <span class="n">httpSession</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">JsonProcessingException</span> 
+    <span class="o">{</span>
+        <span class="c1">// ... 비즈니스 로직</span>
+
+        <span class="n">rentService</span><span class="o">.</span><span class="na">returnUmbrellaByUser</span><span class="o">(</span><span class="n">userToReturn</span><span class="o">,</span> <span class="n">returnUmbrellaByUserRequest</span><span class="o">);</span>
+        <span class="c1">// 미환급 우산 개수 조회</span>
+        <span class="kt">long</span> <span class="n">unrefundedRentCount</span> <span class="o">=</span> <span class="n">rentService</span><span class="o">.</span><span class="na">countUnrefundedRent</span><span class="o">();</span>
+        <span class="c1">// 반납 완료 및 미환급 우산 개수를 슬랙 알림 전송</span>
+        <span class="n">slackAlarmService</span><span class="o">.</span><span class="na">notifyReturn</span><span class="o">(</span><span class="n">unrefundedRentCount</span><span class="o">);</span>
+        <span class="k">return</span> <span class="nc">ResponseEntity</span>
+                <span class="o">.</span><span class="na">ok</span><span class="o">()</span>
+                <span class="o">.</span><span class="na">body</span><span class="o">(</span><span class="k">new</span> <span class="nc">CustomResponse</span><span class="o">(</span>
+                        <span class="s">"success"</span><span class="o">,</span>
+                        <span class="mi">200</span><span class="o">,</span>
+                        <span class="s">"우산 반납 성공"</span>
+                <span class="o">));</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<p>반납을 했을 때, 아래와 같이 알림이 오는 것을 확인할 수 있었습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-12.png" alt="absolute" /></p>
+
+<p>간단한 프로토 타입이며, 앞으로 비즈니스 로직에서 운영 편의를 위한 다양한 편의 기능을 슬랙 봇을 통해 구현해볼 예정입니다.</p>]]></content><author><name>남권우</name></author><category term="Infrastructure" /><category term="Infrastructure" /><category term="Slack" /><summary type="html"><![CDATA[안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.]]></summary></entry><entry><title type="html">서버 부하 테스트, nGrinder</title><link href="https://upbrella.github.io/jekyll-theme-yat/ngrinder/2021/08/25/nGrinder.html" rel="alternate" type="text/html" title="서버 부하 테스트, nGrinder" /><published>2021-08-25T15:00:00+00:00</published><updated>2021-08-25T15:00:00+00:00</updated><id>https://upbrella.github.io/jekyll-theme-yat/ngrinder/2021/08/25/nGrinder</id><content type="html" xml:base="https://upbrella.github.io/jekyll-theme-yat/ngrinder/2021/08/25/nGrinder.html"><![CDATA[<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>업브렐라 서비스를 출시하기 전, 업브렐라 서비스의 안정성을 확인하기 위해 QA팀을 통해 부하 테스트를 했습니다. 하지만, 전문적인 QA팀이 없는 업브렐라 팀에서 새로운 버전이 나올때 마다 부하테스트를 직접 하기에는 어려움이 있기에, 업브렐라 개발팀은 부하테스트를 도입하기로 결정했습니다.</p>
+
+<h2 id="2-ngrinder-도입">2. nGrinder 도입</h2>
+
+<h3 id="2---1-부하-테스트란">2 - 1. 부하 테스트란?</h3>
+
+<p>부하 테스트는 시스템의 성능을 검증하기 위한 테스트 방법 중 하나로, 시스템이 예상되는 사용자 부하 혹은 트래픽 하에서 제대로 작동하는지, 그리고 기대하는 성능 지표를 충족하는지 확인하는 것을 주 목적으로 합니다.</p>
+
+<p>부하 테스트의 주요 특징과 목적은 다음과 같습니다:</p>
+
+<ol>
+  <li><strong>성능 지표 확인</strong>: 부하 테스트는 시스템의 응답 시간, 처리량, 거래 당 시간, 동시 사용자 수 등과 같은 성능 지표를 확인합니다.</li>
+  <li><strong>시스템 한계 탐색</strong>: 부하 테스트는 시스템이 제대로 작동하는 최대 사용자 수나 트래픽을 파악하는 데 도움을 줍니다.</li>
+  <li><strong>자원 사용률 모니터링</strong>: 서버의 CPU 사용률, 메모리 사용량, 네트워크 대역폭 사용량, 데이터베이스 쿼리 성능 등의 자원 사용률을 모니터링합니다.</li>
+  <li><strong>결함 및 약점 탐색</strong>: 예상 사용자 부하에서 시스템의 약점이나 결함을 찾아냅니다. 예를 들어, 메모리 누수, 데이터베이스 병목 현상 등의 문제를 파악할 수 있습니다.</li>
+</ol>
+
+<p>부하 테스트를 수행할 때의 일반적인 절차는 다음과 같습니다:</p>
+
+<ol>
+  <li><strong>목표 설정</strong>: 어떤 성능 지표를 중점적으로 검증할 것인지, 최대 몇 명의 동시 사용자를 지원해야 하는지 등의 목표를 설정합니다.</li>
+  <li><strong>테스트 환경 설정</strong>: 실제 운영 환경과 유사한 테스트 환경을 구성합니다.</li>
+  <li><strong>테스트 시나리오 생성</strong>: 사용자의 실제 행동 패턴을 모방하는 테스트 시나리오를 작성합니다.</li>
+  <li><strong>테스트 실행</strong>: 부하를 점진적으로 증가시키며 테스트를 실행합니다.</li>
+  <li><strong>결과 분석</strong>: 테스트 결과를 분석하여 시스템의 성능 지표를 확인하고, 문제점이나 약점을 파악합니다.</li>
+</ol>
+
+<p>이러한 부하 테스트를 지원하는 도구로는 JMeter, nGrinder 외에도 다양한 도구들이 있지만, 업브렐라 개발팀은 관련 문서가 풍부한 nGrinder를 선택하였습니다.</p>
+
+<h3 id="2---2-시나리오-설정">2 - 2. 시나리오 설정</h3>
+
+<p>시나리오 A : 갑작스러운 소나기에 기존 유저 50여명이 동시에 우산 대여</p>
+
+<p>시나리오 B : 갑작스러운 소나기에 신규 유저 50여명이 동시에 회원가입 후 우산 대여</p>
+
+<p>시나리오 C : 우산을 대여했는데, 곧바로 비가 그쳐서 동시에 30여명이 우산 반납</p>
+
+<p>시나리오 D : 우산을 대여하기 위해 100여명의 유저가 우산의 위치를 조회하기 위해, 지도 조회</p>
+
+<h2 id="3-ngrinder-설정">3. nGrinder 설정</h2>
+
+<h3 id="3---1-ngrinder-설치">3 - 1. nGrinder 설치</h3>
+
+<p>https://github.com/naver/ngrinder/releases</p>
+
+<ol>
+  <li>
+    <p>nGrinder 공식 GitHub에 접속하여, <a href="https://github.com/naver/ngrinder/releases/download/ngrinder-3.5.8-20221230/ngrinder-controller-3.5.8.war">ngrinder-controller-3.5.8.war</a> 을 다운로드 받습니다.</p>
+  </li>
+  <li>
+    <p>다운로드 받은 ngrinder-controller-war 파일을 실행합니다.</p>
+  </li>
+</ol>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">java</span> <span class="o">-</span><span class="n">jar</span> <span class="n">ngrinder</span><span class="o">-</span><span class="n">controller</span><span class="o">-</span><span class="mf">3.5</span><span class="o">.</span><span class="mi">8</span><span class="o">.</span><span class="na">war</span> <span class="o">--</span><span class="n">port</span> <span class="mi">7070</span>
+</code></pre></div></div>
+
+<p>포트번호를 매핑 후 접근해주기 위해 임의로 7070으로 매핑해줍니다.</p>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/263443961-1bf06c61-1f8e-490c-a980-2e4ca9c1c3c2.png" alt="image" /></p>
+
+<p>아래의 아이디와 비밀번호로 접속해줍니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">User</span> <span class="no">ID</span> <span class="o">:</span> <span class="n">admin</span> 
+<span class="nc">Password</span> <span class="o">:</span> <span class="n">admin</span>
+</code></pre></div></div>
+
+<p>이제 에이전트를 설치해줍니다.
+<img src="https://user-images.githubusercontent.com/115435784/263444011-19d4dfbb-31c5-4852-aec2-c9b20ab203ca.png" alt="image" /></p>
+
+<p>메인 페이지에서 Download Agent를 클릭합니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// 압축을 풀어줍니다. </span>
+<span class="n">tar</span> <span class="o">-</span><span class="n">xvf</span> <span class="n">ngrinder</span><span class="o">-</span><span class="n">agent</span><span class="o">-</span><span class="mf">3.5</span><span class="o">.</span><span class="mi">8</span><span class="o">-</span><span class="n">localhost</span><span class="o">.</span><span class="na">tar</span>
+
+<span class="c1">// nGrinder 폴더로 이동합니다. </span>
+<span class="n">cd</span> <span class="n">ngrinder</span><span class="o">-</span><span class="n">agent</span>
+</code></pre></div></div>
+
+<p>폴더 내에 있는 agent를 실행해줍니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">./</span><span class="n">run_agent</span><span class="o">.</span><span class="na">sh</span>
+</code></pre></div></div>
+
+<p>에이전트까지 실행해주면 Agent Management에서 확인할 수 있습니다.</p>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/263444256-789b84ab-7131-4498-90b0-f1f46500bfc6.png" alt="image" /></p>
+
+<p><img src="https://user-images.githubusercontent.com/115435784/263444261-b60928a2-1096-4c09-8b16-399934daa6e3.png" alt="image" /></p>
+
+<p>이와 같이 local에서 실행중인 agent를 확인할 수 있습니다.</p>
+
+<p>실제 서비스 환경에서는 Read 작업이 가장 많이 일어날 것이기 때문에, 가장 복잡한 쿼리를 가진 모든 협업지점 조회로 임시 스크립트를 작성해보겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">static</span> <span class="n">net</span><span class="o">.</span><span class="na">grinder</span><span class="o">.</span><span class="na">script</span><span class="o">.</span><span class="na">Grinder</span><span class="o">.</span><span class="na">grinder</span>
+<span class="kn">import</span> <span class="nn">static</span> <span class="n">org</span><span class="o">.</span><span class="na">junit</span><span class="o">.</span><span class="na">Assert</span><span class="o">.*</span>
+<span class="kn">import</span> <span class="nn">static</span> <span class="n">org</span><span class="o">.</span><span class="na">hamcrest</span><span class="o">.</span><span class="na">Matchers</span><span class="o">.*</span>
+<span class="kn">import</span> <span class="nn">net.grinder.script.GTest</span>
+<span class="kn">import</span> <span class="nn">net.grinder.script.Grinder</span>
+<span class="kn">import</span> <span class="nn">net.grinder.scriptengine.groovy.junit.GrinderRunner</span>
+<span class="kn">import</span> <span class="nn">net.grinder.scriptengine.groovy.junit.annotation.BeforeProcess</span>
+<span class="kn">import</span> <span class="nn">net.grinder.scriptengine.groovy.junit.annotation.BeforeThread</span>
+<span class="c1">// import static net.grinder.util.GrinderUtils.* // You can use this if you're using nGrinder after 3.2.3</span>
+<span class="kn">import</span> <span class="nn">org.junit.Before</span>
+<span class="kn">import</span> <span class="nn">org.junit.BeforeClass</span>
+<span class="kn">import</span> <span class="nn">org.junit.Test</span>
+<span class="kn">import</span> <span class="nn">org.junit.runner.RunWith</span>
+
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.HTTPRequest</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.HTTPRequestControl</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.HTTPResponse</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.cookie.Cookie</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.cookie.CookieManager</span>
+
+<span class="cm">/**
+* A simple example using the HTTP plugin that shows the retrieval of a single page via HTTP.
+*
+* This script is automatically generated by ngrinder.
+*
+* @author admin
+*/</span>
+<span class="nd">@RunWith</span><span class="o">(</span><span class="nc">GrinderRunner</span><span class="o">)</span>
+<span class="kd">class</span> <span class="nc">TestRunner</span> <span class="o">{</span>
+
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">GTest</span> <span class="n">test</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">HTTPRequest</span> <span class="n">request</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="n">headers</span> <span class="o">=</span> <span class="o">[:]</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">params</span> <span class="o">=</span> <span class="o">[:]</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Cookie</span><span class="o">&gt;</span> <span class="n">cookies</span> <span class="o">=</span> <span class="o">[]</span>
+
+	<span class="nd">@BeforeProcess</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="kt">void</span> <span class="nf">beforeProcess</span><span class="o">()</span> <span class="o">{</span>
+		<span class="nc">HTTPRequestControl</span><span class="o">.</span><span class="na">setConnectionTimeout</span><span class="o">(</span><span class="mi">300000</span><span class="o">)</span>
+		<span class="n">test</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">GTest</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="s">"서버의 IP"</span><span class="o">)</span>
+		<span class="n">request</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HTTPRequest</span><span class="o">()</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">info</span><span class="o">(</span><span class="s">"before process."</span><span class="o">)</span>
+	<span class="o">}</span>
+
+	<span class="nd">@BeforeThread</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">beforeThread</span><span class="o">()</span> <span class="o">{</span>
+		<span class="n">test</span><span class="o">.</span><span class="na">record</span><span class="o">(</span><span class="k">this</span><span class="o">,</span> <span class="s">"test"</span><span class="o">)</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">statistics</span><span class="o">.</span><span class="na">delayReports</span> <span class="o">=</span> <span class="kc">true</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">info</span><span class="o">(</span><span class="s">"before thread."</span><span class="o">)</span>
+	<span class="o">}</span>
+
+	<span class="nd">@Before</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">before</span><span class="o">()</span> <span class="o">{</span>
+		<span class="n">request</span><span class="o">.</span><span class="na">setHeaders</span><span class="o">(</span><span class="n">headers</span><span class="o">)</span>
+		<span class="nc">CookieManager</span><span class="o">.</span><span class="na">addCookies</span><span class="o">(</span><span class="n">cookies</span><span class="o">)</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">info</span><span class="o">(</span><span class="s">"before. init headers and cookies"</span><span class="o">)</span>
+	<span class="o">}</span>
+
+	<span class="nd">@Test</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">test</span><span class="o">()</span> <span class="o">{</span>
+		<span class="nc">HTTPResponse</span> <span class="n">response</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="na">GET</span><span class="o">(</span><span class="s">"http://서버의 IP"</span><span class="o">,</span> <span class="n">params</span><span class="o">)</span>
+
+		<span class="k">if</span> <span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">301</span> <span class="o">||</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">302</span><span class="o">)</span> <span class="o">{</span>
+			<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">warn</span><span class="o">(</span><span class="s">"Warning. The response may not be correct. The response code was {}."</span><span class="o">,</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">)</span>
+		<span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+			<span class="n">assertThat</span><span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">,</span> <span class="n">is</span><span class="o">(</span><span class="mi">200</span><span class="o">))</span>
+		<span class="o">}</span>
+	<span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>이제 준비가 완료되었으니, 실제 시나리오를 구성해보겠습니다.</p>
+
+<h2 id="3---2-시나리오-설정">3 - 2. 시나리오 설정</h2>
+
+<p>비가 오는 날 동시에 접속하는 유저가 많은 업브렐라의 특성 상, 한 번에 100명의 유저가 접근하는 상황을 가정해보겠습니다.</p>
+
+<ul>
+  <li>사용자 로그인</li>
+  <li>주변 협업지점 조회</li>
+  <li>우산 대여 신청</li>
+  <li>우산 반납 신청</li>
+</ul>
+
+<p>이에 맞는 스크립트를 작성해보겠습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">import</span> <span class="nn">static</span> <span class="n">net</span><span class="o">.</span><span class="na">grinder</span><span class="o">.</span><span class="na">script</span><span class="o">.</span><span class="na">Grinder</span><span class="o">.</span><span class="na">grinder</span>
+<span class="kn">import</span> <span class="nn">static</span> <span class="n">org</span><span class="o">.</span><span class="na">junit</span><span class="o">.</span><span class="na">Assert</span><span class="o">.*</span>
+<span class="kn">import</span> <span class="nn">static</span> <span class="n">org</span><span class="o">.</span><span class="na">hamcrest</span><span class="o">.</span><span class="na">Matchers</span><span class="o">.*</span>
+<span class="kn">import</span> <span class="nn">net.grinder.script.GTest</span>
+<span class="kn">import</span> <span class="nn">net.grinder.script.Grinder</span>
+<span class="kn">import</span> <span class="nn">net.grinder.scriptengine.groovy.junit.GrinderRunner</span>
+<span class="kn">import</span> <span class="nn">net.grinder.scriptengine.groovy.junit.annotation.BeforeProcess</span>
+<span class="kn">import</span> <span class="nn">net.grinder.scriptengine.groovy.junit.annotation.BeforeThread</span>
+<span class="c1">// import static net.grinder.util.GrinderUtils.* // You can use this if you're using nGrinder after 3.2.3</span>
+<span class="kn">import</span> <span class="nn">org.junit.Before</span>
+<span class="kn">import</span> <span class="nn">org.junit.BeforeClass</span>
+<span class="kn">import</span> <span class="nn">org.junit.Test</span>
+<span class="kn">import</span> <span class="nn">org.junit.runner.RunWith</span>
+
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.HTTPRequest</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.HTTPRequestControl</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.HTTPResponse</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.cookie.Cookie</span>
+<span class="kn">import</span> <span class="nn">org.ngrinder.http.cookie.CookieManager</span>
+
+<span class="cm">/**
+* A simple example using the HTTP plugin that shows the retrieval of a single page via HTTP.
+*
+* This script is automatically generated by ngrinder.
+*
+* @author admin
+*/</span>
+<span class="nd">@RunWith</span><span class="o">(</span><span class="nc">GrinderRunner</span><span class="o">)</span>
+<span class="kd">class</span> <span class="nc">TestRunner</span> <span class="o">{</span>
+
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">GTest</span> <span class="n">test</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">HTTPRequest</span> <span class="n">request</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">String</span><span class="o">&gt;</span> <span class="n">headers</span> <span class="o">=</span> <span class="o">[:]</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">params</span> <span class="o">=</span> <span class="o">[:]</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Cookie</span><span class="o">&gt;</span> <span class="n">cookies</span> <span class="o">=</span> <span class="o">[]</span>
+
+	<span class="nd">@BeforeProcess</span>
+	<span class="kd">public</span> <span class="kd">static</span> <span class="kt">void</span> <span class="nf">beforeProcess</span><span class="o">()</span> <span class="o">{</span>
+		<span class="nc">HTTPRequestControl</span><span class="o">.</span><span class="na">setConnectionTimeout</span><span class="o">(</span><span class="mi">300000</span><span class="o">)</span>
+		<span class="n">test</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">GTest</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="s">"www.localhost"</span><span class="o">)</span>
+		<span class="n">request</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HTTPRequest</span><span class="o">()</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">info</span><span class="o">(</span><span class="s">"before process."</span><span class="o">)</span>
+	<span class="o">}</span>
+
+	<span class="nd">@BeforeThread</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">beforeThread</span><span class="o">()</span> <span class="o">{</span>
+		<span class="n">test</span><span class="o">.</span><span class="na">record</span><span class="o">(</span><span class="k">this</span><span class="o">,</span> <span class="s">"test"</span><span class="o">)</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">statistics</span><span class="o">.</span><span class="na">delayReports</span> <span class="o">=</span> <span class="kc">true</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">info</span><span class="o">(</span><span class="s">"before thread."</span><span class="o">)</span>
+	<span class="o">}</span>
+
+	<span class="nd">@Before</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">before</span><span class="o">()</span> <span class="o">{</span>
+		<span class="nc">HTTPResponse</span> <span class="n">response</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="na">GET</span><span class="o">(</span><span class="s">"http://localhost:8080/users/test"</span><span class="o">,</span> <span class="n">params</span><span class="o">)</span>
+
+		<span class="k">if</span> <span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">301</span> <span class="o">||</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">302</span><span class="o">)</span> <span class="o">{</span>
+			<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">warn</span><span class="o">(</span><span class="s">"Warning. The response may not be correct. The response code was {}."</span><span class="o">,</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">)</span>
+		<span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+			<span class="n">assertThat</span><span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">,</span> <span class="n">is</span><span class="o">(</span><span class="mi">200</span><span class="o">))</span>
+		<span class="o">}</span>
+		
+		<span class="n">request</span><span class="o">.</span><span class="na">setHeaders</span><span class="o">(</span><span class="n">headers</span><span class="o">)</span>
+		<span class="nc">CookieManager</span><span class="o">.</span><span class="na">addCookies</span><span class="o">(</span><span class="n">cookies</span><span class="o">)</span>
+		<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">info</span><span class="o">(</span><span class="s">"before. init headers and cookies"</span><span class="o">)</span>
+	<span class="o">}</span>
+
+	
+	<span class="nd">@Test</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">test1FindStoresByCurrentLocation</span><span class="o">()</span> <span class="o">{</span>
+		<span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">coordinateRequest</span> <span class="o">=</span> <span class="o">[</span><span class="s">"latitudeFrom"</span><span class="o">:</span><span class="s">"0.00"</span><span class="o">,</span><span class="s">"latitudeTo"</span><span class="o">:</span><span class="s">"77.77"</span><span class="o">,</span><span class="s">"longitudeFrom"</span><span class="o">:</span><span class="s">"36.21"</span><span class="o">,</span><span class="s">"longitudeTo"</span><span class="o">:</span><span class="s">"127.12"</span><span class="o">]</span>
+		<span class="nc">HTTPResponse</span> <span class="n">response</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="na">GET</span><span class="o">(</span><span class="s">"http://localhost:8080/stores/location"</span><span class="o">,</span> <span class="n">coordinateRequest</span><span class="o">)</span>
+
+		<span class="k">if</span> <span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">301</span> <span class="o">||</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">302</span><span class="o">)</span> <span class="o">{</span>
+			<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">warn</span><span class="o">(</span><span class="s">"Warning. The response may not be correct. The response code was {}."</span><span class="o">,</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">)</span>
+		<span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+			<span class="n">assertThat</span><span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">,</span> <span class="n">is</span><span class="o">(</span><span class="mi">200</span><span class="o">))</span>
+		<span class="o">}</span>
+	<span class="o">}</span>
+	
+
+	<span class="nd">@Test</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">test2RentUmbrella</span><span class="o">()</span> <span class="o">{</span>
+		<span class="nc">String</span> <span class="n">url</span> <span class="o">=</span> <span class="s">"http://localhost:8080/rent"</span>
+
+		<span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">postData</span> <span class="o">=</span> <span class="o">[</span>
+        <span class="s">"region"</span><span class="o">:</span> <span class="s">"신촌"</span><span class="o">,</span>
+        <span class="s">"storeId"</span><span class="o">:</span> <span class="mi">1</span><span class="o">,</span>
+        <span class="s">"umbrellaId"</span><span class="o">:</span> <span class="mi">1</span><span class="o">,</span>
+        <span class="s">"conditionReport"</span><span class="o">:</span> <span class="s">"필요하다면 상태 신고를 해주세요."</span>
+		<span class="o">]</span>
+
+		<span class="nc">HTTPResponse</span> <span class="n">response</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="na">POST</span><span class="o">(</span><span class="n">url</span><span class="o">,</span> <span class="n">postData</span><span class="o">)</span>
+
+		<span class="k">if</span> <span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">301</span> <span class="o">||</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">302</span><span class="o">)</span> <span class="o">{</span>
+			<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">warn</span><span class="o">(</span><span class="s">"Warning. The response may not be correct. The response code was {}."</span><span class="o">,</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">)</span>
+		<span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+			<span class="n">assertThat</span><span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">,</span> <span class="n">is</span><span class="o">(</span><span class="mi">200</span><span class="o">))</span>
+		<span class="o">}</span>
+	<span class="o">}</span>
+	
+	<span class="nd">@Test</span>
+	<span class="kd">public</span> <span class="kt">void</span> <span class="nf">test3ReturnUmbrella</span><span class="o">()</span> <span class="o">{</span>
+		<span class="nc">String</span> <span class="n">url</span> <span class="o">=</span> <span class="s">"http://localhost:8080/rent"</span>
+		<span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">postData</span> <span class="o">=</span> <span class="o">[</span>
+			<span class="s">"returnStoreId"</span><span class="o">:</span> <span class="mi">1L</span><span class="o">,</span> 
+			<span class="s">"bank"</span><span class="o">:</span> <span class="s">"SampleBank"</span><span class="o">,</span>
+			<span class="s">"accountNumber"</span><span class="o">:</span> <span class="s">"1234567890"</span><span class="o">,</span>
+			<span class="s">"improvementReportContent"</span><span class="o">:</span> <span class="s">"This is a sample report content"</span>
+		<span class="o">];</span>
+
+		<span class="nc">HTTPResponse</span> <span class="n">response</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="na">PATCH</span><span class="o">(</span><span class="n">url</span><span class="o">,</span> <span class="n">postData</span><span class="o">);</span>
+		<span class="k">if</span> <span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">301</span> <span class="o">||</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span> <span class="o">==</span> <span class="mi">302</span><span class="o">)</span> <span class="o">{</span>
+			<span class="n">grinder</span><span class="o">.</span><span class="na">logger</span><span class="o">.</span><span class="na">warn</span><span class="o">(</span><span class="s">"Warning. The response may not be correct. The response code was {}."</span><span class="o">,</span> <span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">)</span>
+		<span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+			<span class="n">assertThat</span><span class="o">(</span><span class="n">response</span><span class="o">.</span><span class="na">statusCode</span><span class="o">,</span> <span class="n">is</span><span class="o">(</span><span class="mi">200</span><span class="o">))</span>
+		<span class="o">}</span>
+	<span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="3---3-테스트-실행">3 - 3. 테스트 실행</h3>
+<p><img src="https://user-images.githubusercontent.com/115435784/263444396-f22113d2-eb1d-4165-afb1-0a5a98dadd6b.png" alt="image" /></p>
+
+<p>이제 Performance Test를 클릭한 후 Script 에서 방금 작성한 스크립트를 선택해줍니다.</p>
+
+<p>Agent는 하나만 실행할 것이기 때문에 1</p>
+
+<p>Vuser는 예상되는 유저의 수 만큼 설정해주면 됩니다.</p>
+
+<p>다음 포스팅에서는 nGrinder를 배포시 자동으로 실행하고 결과를 보고받는 방법에 대해 알아보도록 하겠습니다.</p>
+
+<h3 id="출처">출처</h3>
+
+<p>https://github.com/naver/ngrinder/wiki/Installation-Guide</p>]]></content><author><name>임동현</name></author><category term="nGrinder" /><category term="nGrinder" /><category term="부하 테스트" /><summary type="html"><![CDATA[1. 문제 정의]]></summary></entry></feed>

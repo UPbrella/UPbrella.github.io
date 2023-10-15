@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="google-translate-customization" content="108d9124921d80c3-80e20d618ff053c8-g4f02ec6f3dba68b7-c">
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>AWS 슬랙 배포 알림 파이프라인 구축하기</title>
+<meta name="generator" content="Jekyll v4.3.2">
+<meta property="og:title" content="AWS 슬랙 배포 알림 파이프라인 구축하기">
+<meta name="author" content="남권우">
+<meta property="og:locale" content="ko">
+<meta name="description" content="안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.">
+<meta property="og:description" content="안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.">
+<link rel="canonical" href="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-alarm-bot.html">
+<meta property="og:url" content="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-alarm-bot.html">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2021-08-29T15:00:00+00:00">
+<meta name="twitter:card" content="summary">
+<meta property="twitter:title" content="AWS 슬랙 배포 알림 파이프라인 구축하기">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"남권우"},"dateModified":"2021-08-29T15:00:00+00:00","datePublished":"2021-08-29T15:00:00+00:00","description":"안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.","headline":"AWS 슬랙 배포 알림 파이프라인 구축하기","mainEntityOfPage":{"@type":"WebPage","@id":"https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-alarm-bot.html"},"url":"https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/29/slack-alarm-bot.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-noto-sans@0.0.72/index.min.css">
+  <link rel="stylesheet" href="/jekyll-theme-yat/assets/css/main.css">
+  <script src="/jekyll-theme-yat/assets/js/main.js"></script><link type="application/atom+xml" rel="alternate" href="https://upbrella.github.io/jekyll-theme-yat/feed.xml" title=" ">
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/default.min.css">
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<!-- and it's easy to individually load additional languages -->
+<script charset="UTF-8" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/languages/go.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+// Init highlight js
+document.addEventListener('DOMContentLoaded', function(event) {
+  var els = document.querySelectorAll('pre code')
+
+  function addLangData(block) {
+    var outer = block.parentElement.parentElement.parentElement;
+    var lang = block.getAttribute('data-lang');
+    for (var i = 0; i < outer.classList.length; i++) {
+      var cls = outer.classList[i];
+      if (cls.startsWith('language-')) {
+        lang = cls;
+        break;
+      }
+    }
+    if (!lang) {
+      cls = block.getAttribute('class');
+      lang = cls ? cls.replace('hljs ', '') : '';
+    }
+    if (lang.startsWith('language-')) {
+      lang = lang.substr(9);
+    }
+    block.setAttribute('class', 'hljs ' + lang);
+    block.parentNode.setAttribute('data-lang', lang);
+  }
+
+  function addBadge(block) {
+    var enabled = ('true' || 'true').toLowerCase();
+    if (enabled == 'true') {
+      var pre = block.parentElement;
+      pre.classList.add('badge');
+    }
+  }
+
+  function handle(block) {
+    addLangData(block);
+    addBadge(block)
+    hljs.highlightBlock(block);
+  }
+
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    handle(el);
+  }
+});
+</script>
+
+<style>
+  /* code language badge */
+  pre.badge::before {
+    content: attr(data-lang);
+    color: #fff;
+    background-color: #ff4e00;
+    padding: 0 .5em;
+    border-radius: 0 2px;
+    text-transform: uppercase;
+    text-align: center;
+    min-width: 32px;
+    display: inline-block;
+    position: absolute;
+    right: 0;
+  }
+
+  /* fix wrong badge display for firefox browser */
+  code > table pre::before {
+    display: none;
+  }
+</style>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe-lightbox.umd.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe.umd.min.js"></script>
+<link href="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/photoswipe.min.css" rel="stylesheet">
+<style>
+  .pswp .pswp__container .pswp__img {
+    background-color: white;
+  }
+</style>
+
+<script>
+  function initPhotoSwipe() {
+    let customOptions = {};
+
+    try {
+      const data = ``.replaceAll("=>", ":");
+      customOptions = JSON.parse(data);
+    } catch (e) {
+      console.error("Invalid custom photo previewer options! " + e.message);
+    }
+
+    // Define object and gallery options
+    const options = Object.assign(
+      {
+        gallery: "section.main",
+        children: "a.photo-swipe",
+        photo_scale: 2,
+        // dynamic import is not supported in UMD version
+        pswpModule: PhotoSwipe,
+      },
+      customOptions
+    );
+
+    const galleryEl = document.querySelector(options.gallery);
+    if (!galleryEl) {
+      return;
+    }
+
+    const imgEls = [];
+    const els = galleryEl.querySelectorAll("img:not(.emoji)");
+    els.forEach((el) => {
+      if (!imgEls.includes(el)) {
+        imgEls.push(el);
+      }
+    });
+
+    if (imgEls.length === 0) {
+      return;
+    }
+
+    imgEls.forEach((imgEl) => {
+      imgEl.outerHTML = `
+      <a class="photo-swipe"
+        href="${imgEl.src}"
+        data-pswp-width="${
+          Math.max(imgEl.naturalWidth, imgEl.width) * options.photo_scale
+        }"
+        data-pswp-height="${
+          Math.max(imgEl.naturalHeight, imgEl.height) * options.photo_scale
+        }"
+        data-pswp-caption="${imgEl.getAttribute("caption") || imgEl.alt}"
+        target="_blank">
+        ${imgEl.outerHTML}
+      </a>`;
+    });
+
+    // Initialize PhotoSwipe 5
+    var lightbox = new PhotoSwipeLightbox(options);
+
+    lightbox.init();
+  }
+
+  window.addEventListener("load", initPhotoSwipe);
+</script>
+</head>
+<body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<header class="site-header site-header-transparent" role="banner">
+  <div class="wrapper">
+    <div class="site-header-inner">
+<span class="site-brand"><a class="site-brand-inner" rel="author" href="/jekyll-theme-yat/">
+  <img class="site-favicon" title=" " src="/assets/images/main_logo.svg" onerror="this.style.display='none'">
+   
+</a>
+</span><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger">
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewbox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"></path>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+<a class="page-link" href="/jekyll-theme-yat/archives.html">ARCHIVES</a><a class="page-link" href="/jekyll-theme-yat/categories.html">CATEGORIES</a><a class="page-link" href="/jekyll-theme-yat/tags.html">TAGS</a>
+
+
+
+
+
+
+
+
+
+<span class="page-link">
+
+
+
+<div id="google_translate_element" style="display: none;">
+</div>
+
+<span class="ct-language">
+  <ul class="list-unstyled ct-language-dropdown">
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="ko">
+          
+          <img src="https://cdn.countryflags.com/thumbs/south-korea/flag-400.png" title="Korean">
+          
+        </a>
+      </li>
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="en">
+          
+          <img src="https://cdn.countryflags.com/thumbs/united-states-of-america/flag-400.png" title="English">
+          
+        </a>
+      </li>
+    
+  </ul>
+</span>
+
+<script type="text/javascript">
+function googleTranslateElementInit() {
+  new google.translate.TranslateElement({
+    pageLanguage: 'ko',
+    autoDisplay: false,
+    layout: google.translate.TranslateElement.InlineLayout.VERTICAL
+  }, 'google_translate_element');
+
+  // Links to cross-origin destinations are unsafe
+  var gll = document.getElementsByClassName('goog-logo-link')[0];
+  if (gll) {
+    gll.setAttribute('rel', 'noopener');
+  }
+
+  function restoreLang() {
+    var iframe = document.getElementsByClassName('goog-te-banner-frame')[0];
+    if (!iframe) return;
+
+    var innerDoc = iframe.contentDocument || iframe.contentWindow.document;
+    var restore_el = innerDoc.getElementsByTagName("button");
+
+    for (var i = 0; i < restore_el.length; i++) {
+      if (restore_el[i].id.indexOf("restore") >= 0) {
+        restore_el[i].click();
+        var close_el = innerDoc.getElementsByClassName("goog-close-link");
+        close_el[0].click();
+        return;
+      }
+    }
+  }
+
+  function triggerHtmlEvent(element, eventName) {
+    var event;
+    if (document.createEvent) {
+      event = document.createEvent('HTMLEvents');
+      event.initEvent(eventName, true, true);
+      element.dispatchEvent(event);
+    } else {
+      event = document.createEventObject();
+      event.eventType = eventName;
+      element.fireEvent('on' + event.eventType, event);
+    }
+  }
+
+  var googleCombo = document.querySelector("select.goog-te-combo");
+  var langSelect = document.querySelector('.ct-language');
+  langSelect.addEventListener('click', function(event) {
+    if (!event.target) {
+      return;
+    }
+
+    var selected = document.querySelector('.ct-language .ct-language-selected');
+    if (selected) {
+      selected.classList.remove('ct-language-selected');
+    }
+
+    var target = event.target;
+    while (target && target !== langSelect ) {
+      if (target.matches('.lang-select')) {
+        break;
+      }
+      target = target.parentElement;
+    }
+
+    if (target && target.matches('.lang-select')) {
+      var lang = target.getAttribute('data-lang');
+      if (googleCombo.value == lang) {
+        restoreLang();
+      } else {
+        target.parentElement.classList.add('ct-language-selected');
+        googleCombo.value = lang;
+        triggerHtmlEvent(googleCombo, 'change');
+      }
+    }
+
+    event.preventDefault();
+  });
+}
+</script>
+
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</span>
+</div>
+      </nav>
+</div>
+  </div>
+</header>
+
+<script>
+  function initHeader() {
+    var lastScrollY = getScrollPos().y;
+    var documentElement = document.documentElement;
+
+    function storeScrollData() {
+      var y = getScrollPos().y;documentElement.setAttribute("data-header-transparent", "");var scrollStatus = "";
+
+      if (y <= 0) {
+        scrollStatus = "top";
+      } else if ((window.innerHeight + y) >= document.body.offsetHeight) {
+        scrollStatus = "bottom";
+      } else {
+        var isScrollDown = (y - lastScrollY > 0) ? true : false;
+        scrollStatus = isScrollDown ? "down" : "up";
+      }
+
+      lastScrollY = y;
+      documentElement.setAttribute("data-scroll-status", scrollStatus);
+    }
+
+    window.addEventListener('scroll', function(e) {
+      storeScrollData();
+    });
+
+    storeScrollData();
+  }
+  document.addEventListener('DOMContentLoaded', initHeader);
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+    html .page-banner {
+      background: rgba(0, 0, 0, 0.8);
+    }
+  </style>
+<style>html .page-banner {
+      height:  117.76px;
+      min-height: 320px;
+    }
+    html[data-scroll-status="top"] .page-banner {
+      height: 320px;
+    }
+  </style>
+<style>
+    html .page-banner .page-banner-img > *:first-child {
+      opacity: 0.8;
+    }
+
+    html[data-theme="dark"] .page-banner .page-banner-img > *:first-child {
+      opacity: 0.5744;
+    }
+  </style>
+<section class="page-banner">
+    <div class="page-banner-img">
+<div style="background-image: url(/jekyll-theme-yat/assets/images/banners/home.jpeg)"></div>
+        <img class="img-placeholder" src="/jekyll-theme-yat/assets/images/banners/home.jpeg">
+</div>
+    <div class="wrapper">
+      <div class="page-banner-inner">
+<header class="post-header">
+  <h1 class="post-title p-name" itemprop="name headline">
+    AWS 슬랙 배포 알림 파이프라인 구축하기
+  </h1>
+  <h2 class="post-subtitle">
+    슬랙으로 배포 완료 알림 보내기
+  </h2>
+
+  <p class="post-meta">
+    <time class="dt-published" datetime="2021-08-29T15:00:00+00:00" itemprop="datePublished"><i class="fa fa-calendar"></i> Aug 29, 2021
+    </time>
+
+     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <span class="post-reading-time left-vsplit"><i class="fa fa-clock-o"></i> About 5 mins</span>
+
+    
+    </p>
+<div style="margin-bottom: 15px;">작성자: 남권우</div>
+    
+
+
+    <!-- 
+    
+      
+    
+      
+    
+     -->
+  
+  <div class="post-tags">
+<a class="post-tag" href="/jekyll-theme-yat/tags.html#Infrastructure">#Infrastructure</a><a class="post-tag" href="/jekyll-theme-yat/tags.html#AWS%20Cloud">#AWS Cloud</a><a class="post-tag" href="/jekyll-theme-yat/tags.html#Slack">#Slack</a>
+</div></header>
+</div>
+    </div>
+  </section><script>
+  function hashLocate(hashValue) {
+    hashValue = hashValue.replace(/^.*#h-/, '');
+    hashValue = decodeURIComponent(hashValue);
+    var element = document.getElementById(hashValue);
+
+    if (!element) {
+      return;
+    }
+
+    var header = document.querySelector('header.site-header');
+    var headerRect = header.getBoundingClientRect();
+    var headerTop = Math.floor(headerRect.top);
+    var headerHeight = Math.floor(headerRect.height);
+    var scrollPos = getScrollPos();
+    var offsetY = element.offsetTop - (headerTop + headerHeight + 20);
+
+    if (offsetY == scrollPos.y) {
+      return;
+    }
+
+    if (headerTop == 0  && offsetY > scrollPos.y) {
+      offsetY += headerHeight + 2;
+    } else if (headerTop < 0  && offsetY < scrollPos.y) {
+      offsetY -= headerHeight - 2;
+    }
+
+    smoothScrollTo(offsetY);
+  }
+
+  // The first event occurred
+  window.addEventListener('load', function(event) {
+    if (window.location.hash) {
+      hashLocate(window.location.hash);
+    }
+  });
+
+  // The first event occurred
+  window.addEventListener('click', function(event) {
+    if (event.target.tagName.toLowerCase() == 'a') {
+      hashLocate(event.target.getAttribute('href'));
+    }
+  });
+</script>
+<div class="theme-toggle">
+  <input type="checkbox" id="theme-switch">
+  <label for="theme-switch">
+    <div class="toggle"></div>
+    <div class="names">
+      <p class="light">Light</p>
+      <p class="dark">Dark</p>
+    </div>
+  </label>
+</div>
+
+
+
+
+<script>
+  (function () {
+    var sw = document.getElementById('theme-switch');
+    var html = document.getElementsByTagName('html')[0];
+    var nightModeOption = ('auto' || 'auto').toLowerCase();
+    var storage = nightModeOption === 'manual' ? localStorage : sessionStorage;
+    var themeData = loadThemeData();
+
+    function saveThemeData(data) {
+      storage.setItem('theme', JSON.stringify(data));
+    }
+
+    function loadThemeData() {
+      var data = storage.getItem('theme');
+      try {
+        data = JSON.parse(data ? data : '');
+      } catch (e) {
+        data = { nightShift: undefined, autoToggleAt: 0 };
+        saveThemeData(data);
+      }
+      return data;
+    }
+
+    function handleThemeToggle(nightShift) {
+      themeData.nightShift = nightShift;
+      saveThemeData(themeData);
+      html.dataset.theme = nightShift ? 'dark' : 'light';
+      setTimeout(function () {
+        sw.checked = nightShift ? true : false;
+      }, 50);
+    }
+
+    function autoThemeToggle() {
+      // Next time point of theme toggle
+      var now = new Date();
+      var toggleAt = new Date();
+      var hours = now.getHours();
+      var nightShift = hours >= 19 || hours <= 7;
+
+      if (nightShift) {
+        if (hours > 7) {
+          toggleAt.setDate(toggleAt.getDate() + 1);
+        }
+        toggleAt.setHours(7);
+      } else {
+        toggleAt.setHours(19);
+      }
+
+      toggleAt.setMinutes(0);
+      toggleAt.setSeconds(0);
+      toggleAt.setMilliseconds(0);
+
+      var delay = toggleAt.getTime() - now.getTime();
+
+      // auto toggle theme mode
+      setTimeout(function () {
+        handleThemeToggle(!nightShift);
+      }, delay);
+
+      return {
+        nightShift: nightShift,
+        toggleAt: toggleAt.getTime(),
+      };
+    }
+
+    // Listen the theme toggle event
+    sw.addEventListener('change', function (event) {
+      handleThemeToggle(event.target.checked);
+    });
+
+    if (nightModeOption == 'auto') {
+      var data = autoThemeToggle();
+
+      // Toggle theme by local setting
+      if (data.toggleAt > themeData.autoToggleAt) {
+        themeData.autoToggleAt = data.toggleAt;
+        handleThemeToggle(data.nightShift);
+      } else {
+        handleThemeToggle(themeData.nightShift);
+      }
+    } else if (nightModeOption == 'manual') {
+      handleThemeToggle(themeData.nightShift);
+    } else {
+      var nightShift = themeData.nightShift;
+      if (nightShift === undefined) {
+        nightShift = nightModeOption === 'on';
+      }
+      handleThemeToggle(nightShift);
+    }
+  })();
+</script>
+<div id="click-to-top" class="click-to-top">
+  <i class="fa fa-arrow-up"></i>
+</div>
+<script>
+  (function () {
+    const clickToTop = document.getElementById('click-to-top');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 100) {
+        clickToTop.classList.add('show')
+      }else {
+        clickToTop.classList.remove('show')
+      }
+    });
+    clickToTop.addEventListener('click', () => {
+      window.smoothScrollTo(0);
+    });
+  })();
+</script>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <div class="framework">
+  <section class="main">
+
+     <div class="post">
+  <section>
+
+
+
+
+
+
+
+
+
+<article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+    <div class="post-content e-content" itemprop="articleBody">
+
+      <p>안녕하세요,
+업브렐라 팀의 백엔드 남권우입니다.</p>
+
+<p>이번 포스팅에서는 <a href="https://upbrella.github.io/infrastructure/2023/08/19/ECR-ECS-Infra.html">컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기</a>에서 구축한 인프라에 슬랙 알림을 도입하여 알림 파이프라인을 구축한 이야기입니다.</p>
+
+<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>인프라와 CI/CD 파이프라인을 구축하였지만 여전히 불편한 점이 있었습니다.</p>
+<ul>
+  <li>배포가 완료되어도 AWS에 접속하여 직접 완료 여부를 점검해야 했습니다.</li>
+  <li>배포가 완료되었음을 알리는 메시지를 팀원들에게 직접 공유해야 했습니다.</li>
+  <li>ECS가 갑작스럽게 종료되는 Event가 생겼을 때, 빠르게 팀원들에게 공유되는 알림이 필요했습니다.</li>
+</ul>
+
+<p>따라서 저희는 AWS 슬랙 배포 알림 시스템을 구축하기로 합니다.</p>
+
+<p>업브렐라 개발 CI/CD는 AWS CodeDeploy로 배포되며, 프로덕션의 경우 AWS ECS로 배포됩니다.
+따라서, 배포 서비스가 다르기 때문에 각각 알림 파이프라인을 다르게 구축해야했습니다.
+먼저, CodeDeploy의 경우부터 살펴보겠습니다.</p>
+
+<h2 id="2-codedeploy-알림">2. CodeDeploy 알림</h2>
+
+<p>CodeDeploy는 알림 규칙을 생성하여 쉽게 Slack으로 알림을 보낼 수 있습니다.</p>
+
+<p>알림을 메시지로 보내기 위해서는 AWS Chatbot과 Slack을 연동해야합니다.
+Slack 클라이언트를 생성해주고, 채널을 생성합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-02.png" alt="absolute"></p>
+
+<p>그리고 적절한 권한을 가진 역할을 부여하면 됩니다. 알림 권한을 추가하면, Chatbot이 메시지를 전송할 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-03.png" alt="absolute"></p>
+
+<p>챗봇을 생성했으면 CodeDeploy에서 알림 규칙을 생성하여, 챗봇을 통해 알림을 받을 수 있습니다.
+CodeDeploy &gt; 애플리케이션 &gt; 알림 규칙 &gt; 알림 규칙 생성을 통해 알림 규칙을 생성할 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-01.png" alt="absolute"></p>
+
+<p>알림 트리거 이벤트를 목적에 맞게 선택하고, 아까 생성한 Chatbot을 선택합니다.</p>
+
+<p>마지막으로, Slack에서 선택한 채널에서 <code class="language-plaintext highlighter-rouge">/invite @AWS</code>로 AWS를 초대하면 알림을 받을 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-04.png" alt="absolute"></p>
+
+<p>이렇게 간단하게 CodeDeploy 배포 완료 알림을 구축할 수 있습니다.</p>
+
+<h2 id="3-ecs-알림">3. ECS 알림</h2>
+
+<p>다음으로, ECS 알림 시스템을 구축해보겠습니다.
+ECS는 조금 더 복잡한데, 크게 아래의 흐름으로 동작합니다.</p>
+
+<ol>
+  <li>
+<strong>AWS EventBridge</strong>는 AWS 리소스에서 발생하는 이벤트를 모니터링하고, 이벤트를 수신하는 대상을 정의할 수 있는 서비스입니다.</li>
+  <li>ECS를 모니터링하는 EventBridge의 <strong>규칙을 생성</strong>하고, ECS에서 배포의 상태가 변하는 이벤트가 발생한다면 AWS의 <strong>SNS 주제를 호출</strong>합니다.</li>
+  <li>SNS 주제는 AWS의 메시지 큐라고 볼 수 있습니다. <strong>SNS 주제를 구독하는 대상에게 메시지를 전송</strong>합니다.</li>
+  <li>AWS Chatbot이 SNS 주제를 구독하면, <strong>SNS 주제에 메시지가 전송되면 Chatbot이 Slack으로 메시지를 전송</strong>합니다.</li>
+</ol>
+
+<p>제일 먼저 SNS 주제를 만들어야합니다.</p>
+
+<p>AWS SNS &gt; 주제 &gt; 주제 생성을 통해 주제를 생성합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-05.png" alt="absolute"></p>
+
+<p>그리고, 주제를 구독할 대상을 추가합니다. 아까 생성했던 Chatbot에 SNS 주제를 구독시킵니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-06.png" alt="absolute"></p>
+
+<p>이제, EventBridge 규칙을 생성합니다.</p>
+
+<p>AWS EventBridge &gt; 규칙 &gt; 규칙 생성을 통해 규칙을 생성합니다.</p>
+
+<p>기본 이벤트 버스로 이벤트 패턴이 있는 규칙을 생성합니다.</p>
+
+<p>이벤트 패턴으로는 ECS의 배포 상태가 변하는 이벤트를 선택합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-07.png" alt="absolute"></p>
+
+<p>마지막으로, SNS 주제를 호출하도록 설정합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-08.png" alt="absolute"></p>
+
+<p>이렇게 설정하면 ECS도 배포 알림이 전송됩니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-30-09.png" alt="absolute"></p>
+
+<h2 id="4-마무리">4. 마무리</h2>
+
+<p>이렇게 간단하게 AWS의 배포 알림 시스템을 구축할 수 있습니다.
+다음 포스팅에서는 서비스와 연동하여 주요 기능 알람을 Slack으로 보낼 수 있도록 슬랙 봇을 추가해보겠습니다.</p>
+
+
+    </div>
+
+</article>
+<div class="post-nav">
+<a class="previous" href="/jekyll-theme-yat/wiremock/2021/08/25/wiremock.html" title="외부 API 의존성 문제 해결, WireMock">외부 API 의존성 문제 해결, WireMock...</a><a class="next" href="/jekyll-theme-yat/infrastructure/2021/08/29/slack-service-bot.html" title="슬랙 봇으로 서비스 알림 받기">슬랙 봇으로 서비스 알림 받기</a>
+</div>
+<div class="post-related">
+      <div>Related Articles</div>
+      <ul>
+        <li>
+          <a class="post-link" href="/jekyll-theme-yat/test/2021/08/08/introduction-of-fixture-monkey.html" title="슬랙 봇으로 서비스 알림 받기">테스트 코드 작성 반복 노동으로부터 해방, Fixture Monkey</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/ngrinder/2021/08/25/nGrinder.html" title="슬랙 봇으로 서비스 알림 받기">서버 부하 테스트, nGrinder</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/jpa/2023/09/19/refactor-history.html" title="슬랙 봇으로 서비스 알림 받기">JPA Repository는 Entity만을 조회해야할까?</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/login/2021/08/15/introduction-of-session-server.html" title="슬랙 봇으로 서비스 알림 받기">분산 서버 환경에서 세션 로그인</a>
+        </li>
+</ul>
+    </div>
+<div class="post-comments"></div></section>
+</div>
+
+<!-- Utterances 댓글 스니핏 -->
+<script src="https://utteranc.es/client.js" repo="UPbrella/UPbrella.github.io" issue-term="pathname" theme="github-light" crossorigin="anonymous" async></script>
+
+
+  </section>
+  <section class="sidebar" style="margin-left: 15px;">
+    <!-- Get sidebar items --><style type="text/css" media="screen">
+.post-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+</style>
+
+<div class="post-menu">
+  <div class="post-menu-title">TOC</div>
+  <div class="post-menu-content"></div>
+</div>
+
+<script>
+  function generateContent() {
+    var menu = document.querySelector(".post-menu");
+    var menuContent =  menu.querySelector(".post-menu-content");
+    var headings = document.querySelector(".post-content").querySelectorAll("h2, h3, h4, h5, h6");
+
+    // Hide menu when no headings
+    if (headings.length === 0) {
+      return menu.style.display = "none";
+    }
+
+    // Generate post menu
+    var menuHTML = '';
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      menuHTML += (
+        '<li class="h-' + h.tagName.toLowerCase() + '">'
+        + '<a href="#h-' + h.getAttribute('id') + '">' + h.textContent + '</a></li>');
+    }
+
+    menuContent.innerHTML = '<ul>' + menuHTML + '</ul>';
+
+    // The header element
+    var header = document.querySelector('header.site-header');
+
+    function doMenuCollapse(index, over_items) {
+      var items = menuContent.firstChild.children;
+
+      if (over_items == undefined) {
+        over_items = 20;
+      }
+
+      if (items.length < over_items) {
+        return;
+      }
+
+      var activeItem = items[index];
+      var beginItem = activeItem
+      var endItem = activeItem
+      var beginIndex = index;
+      var endIndex = index + 1;
+      while (beginIndex >= 0
+        && !items[beginIndex].classList.contains('h-h2')) {
+        beginIndex -= 1;
+      }
+      while (endIndex < items.length
+        && !items[endIndex].classList.contains('h-h2')) {
+        endIndex += 1;
+      }
+      for (var i = 0; i < beginIndex; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+      for (var i = beginIndex + 1; i < endIndex; i++) {
+        item = items[i]
+        // if (!item.classList.contains('h-h2')) {
+          item.style.display = '';
+        // }
+      }
+      for (var i = endIndex; i < items.length; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+    }
+
+    // Init menu collapsed
+    doMenuCollapse(-1);
+
+    // Active the menu item
+    window.addEventListener('scroll', function (event) {
+      var lastActive = menuContent.querySelector('.active');
+      var changed = true;
+      var activeIndex = -1;
+      for (var i = headings.length - 1; i >= 0; i--) {
+        var h = headings[i];
+        var headingRect = h.getBoundingClientRect();
+        var headerRect = header.getBoundingClientRect();
+        var headerTop = Math.floor(headerRect.top);
+        var headerHeight = Math.floor(headerRect.height);
+        var headerHeight = headerTop + headerHeight + 20;
+        if (headingRect.top <= headerHeight) {
+          var id = 'h-' + h.getAttribute('id');
+          var a = menuContent.querySelector('a[href="#' + id  + '"]');
+          var curActive = a.parentNode;
+          if (curActive) {
+            curActive.classList.add('active');
+            activeIndex = i;
+          }
+          if (lastActive == curActive) {
+            changed = false;
+          }
+          break;
+        }
+      }
+      if (changed) {
+        if (lastActive) {
+          lastActive.classList.remove('active');
+        }
+        doMenuCollapse(activeIndex);
+      }
+      event.preventDefault();
+    });
+  }
+  generateContent();
+</script>
+</section>
+</div>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/jekyll-theme-yat/"></data>
+
+  <div class="wrapper">
+    <div class="site-footer-inner">
+<div></div>
+      <div>Contact <a title="Upbrella Github Repository" href="https://github.com/UPbrella">GitHub</a> &amp; <a>WebSite</a> </div>
+      <!-- <div>Powered by <a title="Jekyll is a simple, blog-aware, static site
+      generator." href="https://jekyllrb.com/">Jekyll</a> &amp; <a title="Yat, yet
+      another theme." href="https://github.com/jeffreytse/jekyll-theme-yat">Yat Theme</a>.</div>
+      <div class="footer-col rss-subscribe">Subscribe <a href="/jekyll-theme-yat/feed.xml">via RSS</a></div> -->
+    </div>
+  </div>
+</footer>
+</body>
+</html>

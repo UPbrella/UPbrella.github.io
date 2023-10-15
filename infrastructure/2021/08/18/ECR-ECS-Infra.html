@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="google-translate-customization" content="108d9124921d80c3-80e20d618ff053c8-g4f02ec6f3dba68b7-c">
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기</title>
+<meta name="generator" content="Jekyll v4.3.2">
+<meta property="og:title" content="컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기">
+<meta name="author" content="남권우">
+<meta property="og:locale" content="ko">
+<meta name="description" content="안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.">
+<meta property="og:description" content="안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.">
+<link rel="canonical" href="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/18/ECR-ECS-Infra.html">
+<meta property="og:url" content="https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/18/ECR-ECS-Infra.html">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2021-08-18T15:00:00+00:00">
+<meta name="twitter:card" content="summary">
+<meta property="twitter:title" content="컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"남권우"},"dateModified":"2021-08-18T15:00:00+00:00","datePublished":"2021-08-18T15:00:00+00:00","description":"안녕하세요, 업브렐라 팀의 백엔드 남권우입니다.","headline":"컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기","mainEntityOfPage":{"@type":"WebPage","@id":"https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/18/ECR-ECS-Infra.html"},"url":"https://upbrella.github.io/jekyll-theme-yat/infrastructure/2021/08/18/ECR-ECS-Infra.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-noto-sans@0.0.72/index.min.css">
+  <link rel="stylesheet" href="/jekyll-theme-yat/assets/css/main.css">
+  <script src="/jekyll-theme-yat/assets/js/main.js"></script><link type="application/atom+xml" rel="alternate" href="https://upbrella.github.io/jekyll-theme-yat/feed.xml" title=" ">
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/default.min.css">
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<!-- and it's easy to individually load additional languages -->
+<script charset="UTF-8" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/languages/go.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+// Init highlight js
+document.addEventListener('DOMContentLoaded', function(event) {
+  var els = document.querySelectorAll('pre code')
+
+  function addLangData(block) {
+    var outer = block.parentElement.parentElement.parentElement;
+    var lang = block.getAttribute('data-lang');
+    for (var i = 0; i < outer.classList.length; i++) {
+      var cls = outer.classList[i];
+      if (cls.startsWith('language-')) {
+        lang = cls;
+        break;
+      }
+    }
+    if (!lang) {
+      cls = block.getAttribute('class');
+      lang = cls ? cls.replace('hljs ', '') : '';
+    }
+    if (lang.startsWith('language-')) {
+      lang = lang.substr(9);
+    }
+    block.setAttribute('class', 'hljs ' + lang);
+    block.parentNode.setAttribute('data-lang', lang);
+  }
+
+  function addBadge(block) {
+    var enabled = ('true' || 'true').toLowerCase();
+    if (enabled == 'true') {
+      var pre = block.parentElement;
+      pre.classList.add('badge');
+    }
+  }
+
+  function handle(block) {
+    addLangData(block);
+    addBadge(block)
+    hljs.highlightBlock(block);
+  }
+
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    handle(el);
+  }
+});
+</script>
+
+<style>
+  /* code language badge */
+  pre.badge::before {
+    content: attr(data-lang);
+    color: #fff;
+    background-color: #ff4e00;
+    padding: 0 .5em;
+    border-radius: 0 2px;
+    text-transform: uppercase;
+    text-align: center;
+    min-width: 32px;
+    display: inline-block;
+    position: absolute;
+    right: 0;
+  }
+
+  /* fix wrong badge display for firefox browser */
+  code > table pre::before {
+    display: none;
+  }
+</style>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe-lightbox.umd.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe.umd.min.js"></script>
+<link href="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/photoswipe.min.css" rel="stylesheet">
+<style>
+  .pswp .pswp__container .pswp__img {
+    background-color: white;
+  }
+</style>
+
+<script>
+  function initPhotoSwipe() {
+    let customOptions = {};
+
+    try {
+      const data = ``.replaceAll("=>", ":");
+      customOptions = JSON.parse(data);
+    } catch (e) {
+      console.error("Invalid custom photo previewer options! " + e.message);
+    }
+
+    // Define object and gallery options
+    const options = Object.assign(
+      {
+        gallery: "section.main",
+        children: "a.photo-swipe",
+        photo_scale: 2,
+        // dynamic import is not supported in UMD version
+        pswpModule: PhotoSwipe,
+      },
+      customOptions
+    );
+
+    const galleryEl = document.querySelector(options.gallery);
+    if (!galleryEl) {
+      return;
+    }
+
+    const imgEls = [];
+    const els = galleryEl.querySelectorAll("img:not(.emoji)");
+    els.forEach((el) => {
+      if (!imgEls.includes(el)) {
+        imgEls.push(el);
+      }
+    });
+
+    if (imgEls.length === 0) {
+      return;
+    }
+
+    imgEls.forEach((imgEl) => {
+      imgEl.outerHTML = `
+      <a class="photo-swipe"
+        href="${imgEl.src}"
+        data-pswp-width="${
+          Math.max(imgEl.naturalWidth, imgEl.width) * options.photo_scale
+        }"
+        data-pswp-height="${
+          Math.max(imgEl.naturalHeight, imgEl.height) * options.photo_scale
+        }"
+        data-pswp-caption="${imgEl.getAttribute("caption") || imgEl.alt}"
+        target="_blank">
+        ${imgEl.outerHTML}
+      </a>`;
+    });
+
+    // Initialize PhotoSwipe 5
+    var lightbox = new PhotoSwipeLightbox(options);
+
+    lightbox.init();
+  }
+
+  window.addEventListener("load", initPhotoSwipe);
+</script>
+</head>
+<body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<header class="site-header site-header-transparent" role="banner">
+  <div class="wrapper">
+    <div class="site-header-inner">
+<span class="site-brand"><a class="site-brand-inner" rel="author" href="/jekyll-theme-yat/">
+  <img class="site-favicon" title=" " src="/assets/images/main_logo.svg" onerror="this.style.display='none'">
+   
+</a>
+</span><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger">
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewbox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"></path>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+<a class="page-link" href="/jekyll-theme-yat/archives.html">ARCHIVES</a><a class="page-link" href="/jekyll-theme-yat/categories.html">CATEGORIES</a><a class="page-link" href="/jekyll-theme-yat/tags.html">TAGS</a>
+
+
+
+
+
+
+
+
+
+<span class="page-link">
+
+
+
+<div id="google_translate_element" style="display: none;">
+</div>
+
+<span class="ct-language">
+  <ul class="list-unstyled ct-language-dropdown">
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="ko">
+          
+          <img src="https://cdn.countryflags.com/thumbs/south-korea/flag-400.png" title="Korean">
+          
+        </a>
+      </li>
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="en">
+          
+          <img src="https://cdn.countryflags.com/thumbs/united-states-of-america/flag-400.png" title="English">
+          
+        </a>
+      </li>
+    
+  </ul>
+</span>
+
+<script type="text/javascript">
+function googleTranslateElementInit() {
+  new google.translate.TranslateElement({
+    pageLanguage: 'ko',
+    autoDisplay: false,
+    layout: google.translate.TranslateElement.InlineLayout.VERTICAL
+  }, 'google_translate_element');
+
+  // Links to cross-origin destinations are unsafe
+  var gll = document.getElementsByClassName('goog-logo-link')[0];
+  if (gll) {
+    gll.setAttribute('rel', 'noopener');
+  }
+
+  function restoreLang() {
+    var iframe = document.getElementsByClassName('goog-te-banner-frame')[0];
+    if (!iframe) return;
+
+    var innerDoc = iframe.contentDocument || iframe.contentWindow.document;
+    var restore_el = innerDoc.getElementsByTagName("button");
+
+    for (var i = 0; i < restore_el.length; i++) {
+      if (restore_el[i].id.indexOf("restore") >= 0) {
+        restore_el[i].click();
+        var close_el = innerDoc.getElementsByClassName("goog-close-link");
+        close_el[0].click();
+        return;
+      }
+    }
+  }
+
+  function triggerHtmlEvent(element, eventName) {
+    var event;
+    if (document.createEvent) {
+      event = document.createEvent('HTMLEvents');
+      event.initEvent(eventName, true, true);
+      element.dispatchEvent(event);
+    } else {
+      event = document.createEventObject();
+      event.eventType = eventName;
+      element.fireEvent('on' + event.eventType, event);
+    }
+  }
+
+  var googleCombo = document.querySelector("select.goog-te-combo");
+  var langSelect = document.querySelector('.ct-language');
+  langSelect.addEventListener('click', function(event) {
+    if (!event.target) {
+      return;
+    }
+
+    var selected = document.querySelector('.ct-language .ct-language-selected');
+    if (selected) {
+      selected.classList.remove('ct-language-selected');
+    }
+
+    var target = event.target;
+    while (target && target !== langSelect ) {
+      if (target.matches('.lang-select')) {
+        break;
+      }
+      target = target.parentElement;
+    }
+
+    if (target && target.matches('.lang-select')) {
+      var lang = target.getAttribute('data-lang');
+      if (googleCombo.value == lang) {
+        restoreLang();
+      } else {
+        target.parentElement.classList.add('ct-language-selected');
+        googleCombo.value = lang;
+        triggerHtmlEvent(googleCombo, 'change');
+      }
+    }
+
+    event.preventDefault();
+  });
+}
+</script>
+
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</span>
+</div>
+      </nav>
+</div>
+  </div>
+</header>
+
+<script>
+  function initHeader() {
+    var lastScrollY = getScrollPos().y;
+    var documentElement = document.documentElement;
+
+    function storeScrollData() {
+      var y = getScrollPos().y;documentElement.setAttribute("data-header-transparent", "");var scrollStatus = "";
+
+      if (y <= 0) {
+        scrollStatus = "top";
+      } else if ((window.innerHeight + y) >= document.body.offsetHeight) {
+        scrollStatus = "bottom";
+      } else {
+        var isScrollDown = (y - lastScrollY > 0) ? true : false;
+        scrollStatus = isScrollDown ? "down" : "up";
+      }
+
+      lastScrollY = y;
+      documentElement.setAttribute("data-scroll-status", scrollStatus);
+    }
+
+    window.addEventListener('scroll', function(e) {
+      storeScrollData();
+    });
+
+    storeScrollData();
+  }
+  document.addEventListener('DOMContentLoaded', initHeader);
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+    html .page-banner {
+      background: rgba(0, 0, 0, 0.8);
+    }
+  </style>
+<style>html .page-banner {
+      height:  117.76px;
+      min-height: 320px;
+    }
+    html[data-scroll-status="top"] .page-banner {
+      height: 320px;
+    }
+  </style>
+<style>
+    html .page-banner .page-banner-img > *:first-child {
+      opacity: 0.8;
+    }
+
+    html[data-theme="dark"] .page-banner .page-banner-img > *:first-child {
+      opacity: 0.5744;
+    }
+  </style>
+<section class="page-banner">
+    <div class="page-banner-img">
+<div style="background-image: url(/jekyll-theme-yat/assets/images/banners/home.jpeg)"></div>
+        <img class="img-placeholder" src="/jekyll-theme-yat/assets/images/banners/home.jpeg">
+</div>
+    <div class="wrapper">
+      <div class="page-banner-inner">
+<header class="post-header">
+  <h1 class="post-title p-name" itemprop="name headline">
+    컨테이너 관리를 더 쉽게, AWS ECR, ECS로 서비스 구축하기
+  </h1>
+  <h2 class="post-subtitle">
+    컨테이너 오케스트레이션 서비스 - AWS ECR, ECS 도입기
+  </h2>
+
+  <p class="post-meta">
+    <time class="dt-published" datetime="2021-08-18T15:00:00+00:00" itemprop="datePublished"><i class="fa fa-calendar"></i> Aug 18, 2021
+    </time>
+
+     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <span class="post-reading-time left-vsplit"><i class="fa fa-clock-o"></i> About 16 mins</span>
+
+    
+    </p>
+<div style="margin-bottom: 15px;">작성자: 남권우</div>
+    
+
+
+    <!-- 
+    
+      
+    
+      
+    
+     -->
+  
+  <div class="post-tags">
+<a class="post-tag" href="/jekyll-theme-yat/tags.html#Infrastructure">#Infrastructure</a><a class="post-tag" href="/jekyll-theme-yat/tags.html#AWS%20Cloud">#AWS Cloud</a>
+</div></header>
+</div>
+    </div>
+  </section><script>
+  function hashLocate(hashValue) {
+    hashValue = hashValue.replace(/^.*#h-/, '');
+    hashValue = decodeURIComponent(hashValue);
+    var element = document.getElementById(hashValue);
+
+    if (!element) {
+      return;
+    }
+
+    var header = document.querySelector('header.site-header');
+    var headerRect = header.getBoundingClientRect();
+    var headerTop = Math.floor(headerRect.top);
+    var headerHeight = Math.floor(headerRect.height);
+    var scrollPos = getScrollPos();
+    var offsetY = element.offsetTop - (headerTop + headerHeight + 20);
+
+    if (offsetY == scrollPos.y) {
+      return;
+    }
+
+    if (headerTop == 0  && offsetY > scrollPos.y) {
+      offsetY += headerHeight + 2;
+    } else if (headerTop < 0  && offsetY < scrollPos.y) {
+      offsetY -= headerHeight - 2;
+    }
+
+    smoothScrollTo(offsetY);
+  }
+
+  // The first event occurred
+  window.addEventListener('load', function(event) {
+    if (window.location.hash) {
+      hashLocate(window.location.hash);
+    }
+  });
+
+  // The first event occurred
+  window.addEventListener('click', function(event) {
+    if (event.target.tagName.toLowerCase() == 'a') {
+      hashLocate(event.target.getAttribute('href'));
+    }
+  });
+</script>
+<div class="theme-toggle">
+  <input type="checkbox" id="theme-switch">
+  <label for="theme-switch">
+    <div class="toggle"></div>
+    <div class="names">
+      <p class="light">Light</p>
+      <p class="dark">Dark</p>
+    </div>
+  </label>
+</div>
+
+
+
+
+<script>
+  (function () {
+    var sw = document.getElementById('theme-switch');
+    var html = document.getElementsByTagName('html')[0];
+    var nightModeOption = ('auto' || 'auto').toLowerCase();
+    var storage = nightModeOption === 'manual' ? localStorage : sessionStorage;
+    var themeData = loadThemeData();
+
+    function saveThemeData(data) {
+      storage.setItem('theme', JSON.stringify(data));
+    }
+
+    function loadThemeData() {
+      var data = storage.getItem('theme');
+      try {
+        data = JSON.parse(data ? data : '');
+      } catch (e) {
+        data = { nightShift: undefined, autoToggleAt: 0 };
+        saveThemeData(data);
+      }
+      return data;
+    }
+
+    function handleThemeToggle(nightShift) {
+      themeData.nightShift = nightShift;
+      saveThemeData(themeData);
+      html.dataset.theme = nightShift ? 'dark' : 'light';
+      setTimeout(function () {
+        sw.checked = nightShift ? true : false;
+      }, 50);
+    }
+
+    function autoThemeToggle() {
+      // Next time point of theme toggle
+      var now = new Date();
+      var toggleAt = new Date();
+      var hours = now.getHours();
+      var nightShift = hours >= 19 || hours <= 7;
+
+      if (nightShift) {
+        if (hours > 7) {
+          toggleAt.setDate(toggleAt.getDate() + 1);
+        }
+        toggleAt.setHours(7);
+      } else {
+        toggleAt.setHours(19);
+      }
+
+      toggleAt.setMinutes(0);
+      toggleAt.setSeconds(0);
+      toggleAt.setMilliseconds(0);
+
+      var delay = toggleAt.getTime() - now.getTime();
+
+      // auto toggle theme mode
+      setTimeout(function () {
+        handleThemeToggle(!nightShift);
+      }, delay);
+
+      return {
+        nightShift: nightShift,
+        toggleAt: toggleAt.getTime(),
+      };
+    }
+
+    // Listen the theme toggle event
+    sw.addEventListener('change', function (event) {
+      handleThemeToggle(event.target.checked);
+    });
+
+    if (nightModeOption == 'auto') {
+      var data = autoThemeToggle();
+
+      // Toggle theme by local setting
+      if (data.toggleAt > themeData.autoToggleAt) {
+        themeData.autoToggleAt = data.toggleAt;
+        handleThemeToggle(data.nightShift);
+      } else {
+        handleThemeToggle(themeData.nightShift);
+      }
+    } else if (nightModeOption == 'manual') {
+      handleThemeToggle(themeData.nightShift);
+    } else {
+      var nightShift = themeData.nightShift;
+      if (nightShift === undefined) {
+        nightShift = nightModeOption === 'on';
+      }
+      handleThemeToggle(nightShift);
+    }
+  })();
+</script>
+<div id="click-to-top" class="click-to-top">
+  <i class="fa fa-arrow-up"></i>
+</div>
+<script>
+  (function () {
+    const clickToTop = document.getElementById('click-to-top');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 100) {
+        clickToTop.classList.add('show')
+      }else {
+        clickToTop.classList.remove('show')
+      }
+    });
+    clickToTop.addEventListener('click', () => {
+      window.smoothScrollTo(0);
+    });
+  })();
+</script>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <div class="framework">
+  <section class="main">
+
+     <div class="post">
+  <section>
+
+
+
+
+
+
+
+
+
+<article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+    <div class="post-content e-content" itemprop="articleBody">
+
+      <p>안녕하세요,
+업브렐라 팀의 백엔드 남권우입니다.</p>
+
+<p>이번 포스팅에서는 업브렐라의 아키텍처를 소개하고자 합니다.</p>
+
+<p>가장 큰 고민은 어떻게하면 낮은 비용으로 고가용성의 아키텍처를 구축할 수 있을까였습니다.
+또한 지속적인 서비스 운영을 고려했을 때 비용을 절감하는 것 또한 중요한 사안이었습니다.</p>
+
+<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>팀원들과 논의하며 어떤 아키텍처가 이상적일지 고민했었는데요, 아래와 같은 요구사항을 정리했습니다.</p>
+
+<h4 id="애플리케이션이-스래싱-데드락-등으로-응답하지-않는-상태가-되어도-인스턴스-전체에-장애를-전파하지-않아야한다"><strong>애플리케이션이 스래싱, 데드락 등으로 응답하지 않는 상태가 되어도 인스턴스 전체에 장애를 전파하지 않아야한다.</strong></h4>
+<p>이전의 소규모 인프라에서 서비스를 구축했을 때, 공통적으로 나타났던 문제점은 애플리케이션 한 포인트에서 장애가 발생하면 서비스 전체로 장애가 전파된다는 점이었습니다.
+단일 인스턴스로 이루어진 서비스에서는 이 문제를 해결하기가 쉽지 않았습니다. 따라서 서비스의 흐름에 따라 단일 장애 지점(SPOF)가 발생하는 경우를 방지하는 아키텍처를 구성하려 했습니다.</p>
+
+<h4 id="애플리케이션이-트래픽에-따라-유연한-확장scale-out을-할-수-있다"><strong>애플리케이션이 트래픽에 따라 유연한 확장(Scale-out)을 할 수 있다.</strong></h4>
+<p>처음부터 서비스의 트래픽을 예측하기란 쉽지 않습니다. 높은 성능을 가진 서버를 구성하면 좋지만 비용적인 측면에서 많은 제약이 따릅니다.
+따라서 서비스의 트래픽이 증가하면, 인스턴스의 수를 늘리는 스케일링이 필요합니다.
+인스턴스를 늘리거나 줄이는 스케일링을 빠르게 자동화할 수 있어야 트래픽에 빠른 대응을 할 수 있습니다.
+인스턴스의 수를 늘리는 작업을 자동화할 수 있는 AWS의 AutoScaling Group을 도입하였습니다.</p>
+
+<h4 id="특정-컨테이너가-다운되어도-높은-가용성을-보장한다"><strong>특정 컨테이너가 다운되어도, 높은 가용성을 보장한다.</strong></h4>
+<p>컨테이너는 인스턴스의 프로세스로 실행되기 때문에, 컨테이너가 다운되면 인스턴스 전체가 다운되는 문제가 발생합니다.
+컨테이너가 다운되어도 장애가 발생하지 않으려면, 기본적으로 컨테이너가 이중화되어있어야 합니다.
+각 컨테이너를 로드밸런서로 헬스체크하고, 컨테이너가 다운되면 로드밸런서에서 해당 컨테이너로 트래픽을 보내지 않도록 설정하면 컨테이너가 다운되어도 즉각적인 복구가 가능합니다.</p>
+
+<h4 id="스스로-컨테이너-복구와-인스턴스-복구를-진행한다"><strong>스스로 컨테이너 복구와 인스턴스 복구를 진행한다.</strong></h4>
+<p>컨테이너가 다운되면, 컨테이너를 복구해야 합니다. 이는 로드밸런서를 통해 헬스 체크가 지속적으로 이루어지고, 헬스 체크 응답이 반환되지 않는다면 ECS Agent를 통해 컨테이너를 재생성합니다.
+AWS 오토 스케일링 그룹에서는 인스턴스 단위의 복구도 제공합니다. 인스턴스가 반응하지 않을 때 인스턴스를 새로 생성하여 서비스를 복구합니다.</p>
+
+<h4 id="가용-영역az-단위의-장애가-발생해도-서비스가-중단되지-않는다"><strong>가용 영역(AZ) 단위의 장애가 발생해도 서비스가 중단되지 않는다.</strong></h4>
+<p>가용 영역 단위의 장애가 발생하면, 해당 가용 영역의 인스턴스와 컨테이너가 모두 다운되어 서비스가 중단됩니다.
+따라서 AWS의 AZ 단위 장애에 영향을 받지 않도록 여러 AZ에 걸친 인프라 구축이 필요했습니다.</p>
+
+<h4 id="이중화에-따른-세션-관리가-필요하다"><strong>이중화에 따른 세션 관리가 필요하다.</strong></h4>
+<p>서비스를 이중화하게되면, 사용자의 세션은 EC2 인스턴스에 무관하게 동일하게 유지되어야 합니다.
+따라서 한 곳에서 모든 세션 정보를 관리하기 위한 Redis 세션 서버도 도입하게 되었습니다.</p>
+
+<h2 id="2-ecs-ecr-도입">2. ECS, ECR 도입</h2>
+
+<h3 id="21-elastic-container-service-ecs">2.1. Elastic Container Service (ECS)</h3>
+<p>컨테이너와 인스턴스를 고가용성으로 유지하기 위해 컨테이너를 배포, 관리, 스케일링을 도와주는 컨테이너 오케스트레이션이 필요했습니다.
+그 중에서 AWS에서 제공하는 <strong>ECS</strong>는 쉬운 설정으로 애플리케이션 구축에 집중할 수 있게 도와주는 서비스라고 합니다.</p>
+
+<p>간단하게 ECS에 대해서 살펴보면, ECS는 아래와 같은 용량, 컨트롤러, 프로비저닝 3계층으로 구성됩니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-02.png" alt="absolute"></p>
+
+<p>용량은 어떤 인프라에서 컨테이너를 실행할지 결정하는 계층입니다. EC2, Fargate 등이 있지만 업브렐라는 서버가 있는 환경인 EC2 컨테이너를 선택했습니다.</p>
+
+<p>컨트롤러는 ECS에서 관리하는 인프라 인스턴스 내부에서 동작하는 애플리케이션을 관리하는 소프트웨어입니다.</p>
+
+<p>다음으로 ECS의 관리 단위에 대해서 살펴보겠습니다. ECS는 내부적으로 클러스터, 서비스, 태스크로 세분화되어 관리됩니다. 그림으로 그리면 다음 그림과 같습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-07.png" alt="absolute"></p>
+
+<p><strong>ECS 클러스터</strong>는 컨테이너를 실행하는 논리적인 공간입니다. 우리가 관리하고자하는 컨테이너 인스턴스들을 목적에 따라 논리적으로 묶어주는 그룹이 클러스터입니다.</p>
+
+<p>ECS에서는 이 클러스터 내부에 오토스케일링 그룹에 따라 생성되는 인스턴스들을 등록합니다. 인스턴스 내부에는 각각 ECS 에이전트가 구동되어 인스턴스 내부의 컨테이너들에 대해 컨테이너를 증가시키거나 띄우는 등 오케스트레이션을 실행할 수 있게 되는 것입니다.</p>
+
+<p><strong>태스크</strong>는 컨테이너를 실행하는 최소 단위입니다. 그렇지만 컨테이너 1개가 태스크를 의미하지는 않고, 태스크 내부에 여러 컨테이너를 묶을 수 있습니다. 그리고 같은 태스크 내의 컨테이너는 같은 ECS 클러스터 인스턴스 내에 실행되도록 보장됩니다.
+태스크를 정의하기 위해 AWS의 태스크 정의(Task Definition)을 설정해주어야 합니다.
+태스크 정의에서는 역할, Docker 명령, CPU/Memory 할당 및 제한 등의 옵션을 설정할 수 있습니다.</p>
+
+<p><strong>서비스</strong>는 태스크들의 집합입니다. 서비스에서는 태스크의 실행 개수, 배포 방식, 실행 유형, 태스크 배치 전략 등을 설정하여 태스크를 관리합니다.</p>
+
+<h3 id="elastic-container-registry-ecr">Elastic Container Registry (ECR)</h3>
+
+<p><strong>ECR</strong>은 ECS와 연계되어 사용되는 서비스로, ECS에서 애플리케이션을 복구, 배포하기 위해 필요한 도커 이미지들을 저장하는 저장소입니다.
+업브렐라에서는 Github Actions과 연계하여 빌드된 도커 이미지를 ECR에 업로드하는데, 이 과정도 다음 포스팅에서 자세히 다루겠습니다.</p>
+
+<h2 id="3-업브렐라의-아키텍처-구성">3. 업브렐라의 아키텍처 구성</h2>
+
+<h3 id="31-아키텍처-구성도">3.1. 아키텍처 구성도</h3>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-01.png" alt="absolute"></p>
+
+<p>업브렐라의 아키텍처는 논리적으로 웹서버, WAS, DB로 구분되어 있으며, 물리적으로는 서버와 데이터베이스로 나뉘어집니다.
+다만, 물리적인 EC2 인스턴스 한 대 내부에 웹서버, WAS 컨테이너를 구성하였습니다.
+이 때 만약 특정 EC2 인스턴스의 웹 서버 컨테이너가 다운되었을 때 로드밸런서 없이 로컬 호스트 통신을 하게 되면 동일 인스턴스 내부의 WAS 컨테이너도 사용할 수 없는 상태가 됩니다.
+따라서 별도의 로드밸런서를 두어 웹서버 컨테이너에서 보내는 트래픽을 받아 WAS에 다시 전송하는 구조를 설계했습니다.
+이렇게 했을 때, 모든 컨테이너가 로드밸런서의 헬스체크를 독립적으로 받게 되며, 컨테이너가 다운되면 해당 컨테이너만 복구가 진행됩니다.</p>
+
+<h3 id="32-az-구성">3.2. AZ 구성</h3>
+
+<p>업브렐라의 아키텍처는 AZ 단위 장애에 대응하기 위해 2개의 AZ에 걸쳐 구성되었습니다. 다만 데이터베이스는 비용적인 측면을 고려해서 Multi-AZ 구성을 하지 못하고 단일 AZ DB를 사용하였습니다.
+따라서 현재는 사실 상 AZ 단위의 장애가 발생하면 문제가 발생하는 셈인데요.
+추후에 서비스가 확장된다면 Multi-AZ로 마이그레이션하거나, EC2 인스턴스 2대로 직접 레플리카를 구성하는 방안을 고려하고 있습니다.</p>
+
+<h3 id="33-auto-scaling-group-구성">3.3. Auto Scaling Group 구성</h3>
+
+<p>업브렐라의 Auto Scaling Group은 EC2 t3.small 인스턴스 최소 2대, 최대 3대로 구성되어 있습니다.
+트래픽이 많이 발생한다면 3대까지 인스턴스가 늘어나 트래픽을 분산하고, 트래픽이 줄어들면 2대까지 인스턴스가 줄어들어 비용을 절감합니다.</p>
+
+<p>오토 스케일링 그룹을 구성하기 위해, 시작 템플릿을 만들어야 합니다. 시작 템플릿은 오토 스케일링 그룹에서 스케일링을 통해 인스턴스를 생성할 때 사용하는 인스턴스의 템플릿입니다.
+주의할 점은, 애플리케이션에 기본으로 사용하는 Image인 AMI를 선택할 때 ECS Optimized AMI를 선택해야 합니다.
+ECS 최적화된 AMI는 ECS 에이전트가 미리 설치되어 있어서 ECS 클러스터에 인스턴스를 등록할 때 편리합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-04.png" alt="absolute"></p>
+
+<p>위에서 생성한 시작 템플릿을 사용하여 오토 스케일링 그룹을 생성합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-06.png" alt="absolute"></p>
+
+<h3 id="34-로드밸런서-구성">3.4. 로드밸런서 구성</h3>
+
+<p>업브렐라의 로드밸런서는 Application Load Balancer를 사용하였습니다.
+Application Load Balancer는 HTTP, HTTPS 트래픽을 처리할 수 있으며, 컨테이너 단위의 헬스체크를 지원합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-05.png" alt="absolute"></p>
+
+<p>SSL 인증서는 AWS Certificate Manager를 사용하였습니다.
+Route 53로 ALB를 DNS로 연결시켜 주었고, TLS를 이용하기 때문에 HTTP로 접속했을 시 HTTPS로 리다이렉션하는 이벤트도 추가했습니다.</p>
+
+<p>로드밸런서는 총 2대를 구성했는데, DNS가 연결된 로드밸런서에서 SSL 오프로딩이 일어나, ALB 이후 단에서는 HTTP 통신으로 내부적으로 통신이 이루어집니다.</p>
+
+<h3 id="35-ecs-클러스터-서비스-태스크-구성">3.5. ECS 클러스터, 서비스, 태스크 구성</h3>
+
+<p>위에서 ECS에 대해 살펴보았는데요, 이를 기반으로 어떻게 각 구성 단위를 설정했는지 살펴보겠습니다.</p>
+
+<p>업브렐라에서는 WAS와 Web 서버 각각의 도커 이미지가 ECR에 등록되어 있습니다.
+그리고 각 이미지는 서로 독립적으로 실행, 관리되어야 하므로 별도의 태스크로 생성하였습니다.</p>
+
+<p>업브렐라 서비스 전체를 묶는 클러스터를 생성했고, 아래 그림처럼 클러스터 내부에는 2개의 인스턴스가 관리됩니다.
+그리고 웹 서비스와 WAS 서비스가 클러스터 내부에서 동작하기 때문에 각 서비스를 생성해주었습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-08.png" alt="absolute"></p>
+
+<p>서비스는 태스크의 묶음이기 때문에 2개의 인스턴스에 2개의 태스크가 생성되는 서비스를 생성하였습니다.
+이 때, 서비스에서 정의된 태스크 배치 전략에 따라 2개의 인스턴스에 각각 1개의 태스크가 배치되어 실행됩니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-19-09.png" alt="absolute"></p>
+
+<h2 id="4-사용해보니">4. 사용해보니..</h2>
+
+<p>설정이 어려웠지만 사용해보니 아래 장점들이 체감되었습니다.</p>
+
+<h4 id="복구가-빠르다"><strong>복구가 빠르다.</strong></h4>
+<p>컨테이너가 꺼져도 로드밸런서를 통해 상태를 감지하기 때문에 빠른 복구되는 가용성이 체감되었습니다.</p>
+
+<h4 id="스케일링이-쉽다"><strong>스케일링이 쉽다</strong></h4>
+<p>트래픽에 따라 태스크 개수를 늘리기만하면 아주 쉽게 스케일링을 할 수 있었습니다.</p>
+
+<h4 id="설정이-쉽다"><strong>설정이 쉽다.</strong></h4>
+
+<p>위 장점들은 사실 컨테이너 오케스트레이션의 장점인데요, 설정이 굉장히 어렵다고 알려져있는 EKS, 쿠버네티스에 비해 간단하게 설정하여 사용할 수 있어서 좋았습니다. (물론 처음 사용하는 입장에서는 어려웠습니다..)</p>
+
+<p>다음 포스팅에는 이어서 인프라에서 CI/CD 파이프라인을 구축하는 과정을 다뤄보겠습니다.</p>
+
+
+    </div>
+
+</article>
+<div class="post-nav">
+<a class="previous" href="/jekyll-theme-yat/login/2021/08/15/introduction-of-session-server.html" title="분산 서버 환경에서 세션 로그인">분산 서버 환경에서 세션 로그인</a><a class="next" href="/jekyll-theme-yat/infrastructure/2021/08/19/CI-CD-with-ECS-ECR.html" title="롤링 업데이트, AWS ECR, ECS로 쉽게">롤링 업데이트, AWS ECR, ECS로 쉽게...</a>
+</div>
+<div class="post-related">
+      <div>Related Articles</div>
+      <ul>
+        <li>
+          <a class="post-link" href="/jekyll-theme-yat/infrastructure/2021/08/19/CI-CD-with-ECS-ECR.html" title="롤링 업데이트, AWS ECR, ECS로 쉽게">롤링 업데이트, AWS ECR, ECS로 쉽게</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/infrastructure/2021/08/29/slack-service-bot.html" title="롤링 업데이트, AWS ECR, ECS로 쉽게">슬랙 봇으로 서비스 알림 받기</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/login/2021/08/15/introduction-of-session-server.html" title="롤링 업데이트, AWS ECR, ECS로 쉽게">분산 서버 환경에서 세션 로그인</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/mysql/2023/09/13/data-bulk-insert.html" title="롤링 업데이트, AWS ECR, ECS로 쉽게">대용량 데이터 삽입</a>
+        </li>
+</ul>
+    </div>
+<div class="post-comments"></div></section>
+</div>
+
+<!-- Utterances 댓글 스니핏 -->
+<script src="https://utteranc.es/client.js" repo="UPbrella/UPbrella.github.io" issue-term="pathname" theme="github-light" crossorigin="anonymous" async></script>
+
+
+  </section>
+  <section class="sidebar" style="margin-left: 15px;">
+    <!-- Get sidebar items --><style type="text/css" media="screen">
+.post-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+</style>
+
+<div class="post-menu">
+  <div class="post-menu-title">TOC</div>
+  <div class="post-menu-content"></div>
+</div>
+
+<script>
+  function generateContent() {
+    var menu = document.querySelector(".post-menu");
+    var menuContent =  menu.querySelector(".post-menu-content");
+    var headings = document.querySelector(".post-content").querySelectorAll("h2, h3, h4, h5, h6");
+
+    // Hide menu when no headings
+    if (headings.length === 0) {
+      return menu.style.display = "none";
+    }
+
+    // Generate post menu
+    var menuHTML = '';
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      menuHTML += (
+        '<li class="h-' + h.tagName.toLowerCase() + '">'
+        + '<a href="#h-' + h.getAttribute('id') + '">' + h.textContent + '</a></li>');
+    }
+
+    menuContent.innerHTML = '<ul>' + menuHTML + '</ul>';
+
+    // The header element
+    var header = document.querySelector('header.site-header');
+
+    function doMenuCollapse(index, over_items) {
+      var items = menuContent.firstChild.children;
+
+      if (over_items == undefined) {
+        over_items = 20;
+      }
+
+      if (items.length < over_items) {
+        return;
+      }
+
+      var activeItem = items[index];
+      var beginItem = activeItem
+      var endItem = activeItem
+      var beginIndex = index;
+      var endIndex = index + 1;
+      while (beginIndex >= 0
+        && !items[beginIndex].classList.contains('h-h2')) {
+        beginIndex -= 1;
+      }
+      while (endIndex < items.length
+        && !items[endIndex].classList.contains('h-h2')) {
+        endIndex += 1;
+      }
+      for (var i = 0; i < beginIndex; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+      for (var i = beginIndex + 1; i < endIndex; i++) {
+        item = items[i]
+        // if (!item.classList.contains('h-h2')) {
+          item.style.display = '';
+        // }
+      }
+      for (var i = endIndex; i < items.length; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+    }
+
+    // Init menu collapsed
+    doMenuCollapse(-1);
+
+    // Active the menu item
+    window.addEventListener('scroll', function (event) {
+      var lastActive = menuContent.querySelector('.active');
+      var changed = true;
+      var activeIndex = -1;
+      for (var i = headings.length - 1; i >= 0; i--) {
+        var h = headings[i];
+        var headingRect = h.getBoundingClientRect();
+        var headerRect = header.getBoundingClientRect();
+        var headerTop = Math.floor(headerRect.top);
+        var headerHeight = Math.floor(headerRect.height);
+        var headerHeight = headerTop + headerHeight + 20;
+        if (headingRect.top <= headerHeight) {
+          var id = 'h-' + h.getAttribute('id');
+          var a = menuContent.querySelector('a[href="#' + id  + '"]');
+          var curActive = a.parentNode;
+          if (curActive) {
+            curActive.classList.add('active');
+            activeIndex = i;
+          }
+          if (lastActive == curActive) {
+            changed = false;
+          }
+          break;
+        }
+      }
+      if (changed) {
+        if (lastActive) {
+          lastActive.classList.remove('active');
+        }
+        doMenuCollapse(activeIndex);
+      }
+      event.preventDefault();
+    });
+  }
+  generateContent();
+</script>
+</section>
+</div>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/jekyll-theme-yat/"></data>
+
+  <div class="wrapper">
+    <div class="site-footer-inner">
+<div></div>
+      <div>Contact <a title="Upbrella Github Repository" href="https://github.com/UPbrella">GitHub</a> &amp; <a>WebSite</a> </div>
+      <!-- <div>Powered by <a title="Jekyll is a simple, blog-aware, static site
+      generator." href="https://jekyllrb.com/">Jekyll</a> &amp; <a title="Yat, yet
+      another theme." href="https://github.com/jeffreytse/jekyll-theme-yat">Yat Theme</a>.</div>
+      <div class="footer-col rss-subscribe">Subscribe <a href="/jekyll-theme-yat/feed.xml">via RSS</a></div> -->
+    </div>
+  </div>
+</footer>
+</body>
+</html>

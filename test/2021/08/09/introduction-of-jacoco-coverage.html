@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="google-translate-customization" content="108d9124921d80c3-80e20d618ff053c8-g4f02ec6f3dba68b7-c">
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>내 테스트 코드는 몇 점짜리? Jacoco를 통한 커버리지 관리</title>
+<meta name="generator" content="Jekyll v4.3.2">
+<meta property="og:title" content="내 테스트 코드는 몇 점짜리? Jacoco를 통한 커버리지 관리">
+<meta name="author" content="남권우">
+<meta property="og:locale" content="ko">
+<meta name="description" content="안녕하세요, 저는 업브렐라에서 백엔드 개발을 담당하고 있습니다. 업브렐라의 테스트 코드를 작성하면서 어떻게 하면 더 퀄리티 좋은 테스트 코드를 작성할 수 있을지에 대해 고민했습니다.">
+<meta property="og:description" content="안녕하세요, 저는 업브렐라에서 백엔드 개발을 담당하고 있습니다. 업브렐라의 테스트 코드를 작성하면서 어떻게 하면 더 퀄리티 좋은 테스트 코드를 작성할 수 있을지에 대해 고민했습니다.">
+<link rel="canonical" href="https://upbrella.github.io/jekyll-theme-yat/test/2021/08/09/introduction-of-jacoco-coverage.html">
+<meta property="og:url" content="https://upbrella.github.io/jekyll-theme-yat/test/2021/08/09/introduction-of-jacoco-coverage.html">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2021-08-09T15:00:00+00:00">
+<meta name="twitter:card" content="summary">
+<meta property="twitter:title" content="내 테스트 코드는 몇 점짜리? Jacoco를 통한 커버리지 관리">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"남권우"},"dateModified":"2021-08-09T15:00:00+00:00","datePublished":"2021-08-09T15:00:00+00:00","description":"안녕하세요, 저는 업브렐라에서 백엔드 개발을 담당하고 있습니다. 업브렐라의 테스트 코드를 작성하면서 어떻게 하면 더 퀄리티 좋은 테스트 코드를 작성할 수 있을지에 대해 고민했습니다.","headline":"내 테스트 코드는 몇 점짜리? Jacoco를 통한 커버리지 관리","mainEntityOfPage":{"@type":"WebPage","@id":"https://upbrella.github.io/jekyll-theme-yat/test/2021/08/09/introduction-of-jacoco-coverage.html"},"url":"https://upbrella.github.io/jekyll-theme-yat/test/2021/08/09/introduction-of-jacoco-coverage.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-noto-sans@0.0.72/index.min.css">
+  <link rel="stylesheet" href="/jekyll-theme-yat/assets/css/main.css">
+  <script src="/jekyll-theme-yat/assets/js/main.js"></script><link type="application/atom+xml" rel="alternate" href="https://upbrella.github.io/jekyll-theme-yat/feed.xml" title=" ">
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/default.min.css">
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<!-- and it's easy to individually load additional languages -->
+<script charset="UTF-8" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/languages/go.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+// Init highlight js
+document.addEventListener('DOMContentLoaded', function(event) {
+  var els = document.querySelectorAll('pre code')
+
+  function addLangData(block) {
+    var outer = block.parentElement.parentElement.parentElement;
+    var lang = block.getAttribute('data-lang');
+    for (var i = 0; i < outer.classList.length; i++) {
+      var cls = outer.classList[i];
+      if (cls.startsWith('language-')) {
+        lang = cls;
+        break;
+      }
+    }
+    if (!lang) {
+      cls = block.getAttribute('class');
+      lang = cls ? cls.replace('hljs ', '') : '';
+    }
+    if (lang.startsWith('language-')) {
+      lang = lang.substr(9);
+    }
+    block.setAttribute('class', 'hljs ' + lang);
+    block.parentNode.setAttribute('data-lang', lang);
+  }
+
+  function addBadge(block) {
+    var enabled = ('true' || 'true').toLowerCase();
+    if (enabled == 'true') {
+      var pre = block.parentElement;
+      pre.classList.add('badge');
+    }
+  }
+
+  function handle(block) {
+    addLangData(block);
+    addBadge(block)
+    hljs.highlightBlock(block);
+  }
+
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    handle(el);
+  }
+});
+</script>
+
+<style>
+  /* code language badge */
+  pre.badge::before {
+    content: attr(data-lang);
+    color: #fff;
+    background-color: #ff4e00;
+    padding: 0 .5em;
+    border-radius: 0 2px;
+    text-transform: uppercase;
+    text-align: center;
+    min-width: 32px;
+    display: inline-block;
+    position: absolute;
+    right: 0;
+  }
+
+  /* fix wrong badge display for firefox browser */
+  code > table pre::before {
+    display: none;
+  }
+</style>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe-lightbox.umd.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/umd/photoswipe.umd.min.js"></script>
+<link href="//cdnjs.cloudflare.com/ajax/libs/photoswipe/5.3.7/photoswipe.min.css" rel="stylesheet">
+<style>
+  .pswp .pswp__container .pswp__img {
+    background-color: white;
+  }
+</style>
+
+<script>
+  function initPhotoSwipe() {
+    let customOptions = {};
+
+    try {
+      const data = ``.replaceAll("=>", ":");
+      customOptions = JSON.parse(data);
+    } catch (e) {
+      console.error("Invalid custom photo previewer options! " + e.message);
+    }
+
+    // Define object and gallery options
+    const options = Object.assign(
+      {
+        gallery: "section.main",
+        children: "a.photo-swipe",
+        photo_scale: 2,
+        // dynamic import is not supported in UMD version
+        pswpModule: PhotoSwipe,
+      },
+      customOptions
+    );
+
+    const galleryEl = document.querySelector(options.gallery);
+    if (!galleryEl) {
+      return;
+    }
+
+    const imgEls = [];
+    const els = galleryEl.querySelectorAll("img:not(.emoji)");
+    els.forEach((el) => {
+      if (!imgEls.includes(el)) {
+        imgEls.push(el);
+      }
+    });
+
+    if (imgEls.length === 0) {
+      return;
+    }
+
+    imgEls.forEach((imgEl) => {
+      imgEl.outerHTML = `
+      <a class="photo-swipe"
+        href="${imgEl.src}"
+        data-pswp-width="${
+          Math.max(imgEl.naturalWidth, imgEl.width) * options.photo_scale
+        }"
+        data-pswp-height="${
+          Math.max(imgEl.naturalHeight, imgEl.height) * options.photo_scale
+        }"
+        data-pswp-caption="${imgEl.getAttribute("caption") || imgEl.alt}"
+        target="_blank">
+        ${imgEl.outerHTML}
+      </a>`;
+    });
+
+    // Initialize PhotoSwipe 5
+    var lightbox = new PhotoSwipeLightbox(options);
+
+    lightbox.init();
+  }
+
+  window.addEventListener("load", initPhotoSwipe);
+</script>
+</head>
+<body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<header class="site-header site-header-transparent" role="banner">
+  <div class="wrapper">
+    <div class="site-header-inner">
+<span class="site-brand"><a class="site-brand-inner" rel="author" href="/jekyll-theme-yat/">
+  <img class="site-favicon" title=" " src="/assets/images/main_logo.svg" onerror="this.style.display='none'">
+   
+</a>
+</span><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger">
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewbox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"></path>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+<a class="page-link" href="/jekyll-theme-yat/archives.html">ARCHIVES</a><a class="page-link" href="/jekyll-theme-yat/categories.html">CATEGORIES</a><a class="page-link" href="/jekyll-theme-yat/tags.html">TAGS</a>
+
+
+
+
+
+
+
+
+
+<span class="page-link">
+
+
+
+<div id="google_translate_element" style="display: none;">
+</div>
+
+<span class="ct-language">
+  <ul class="list-unstyled ct-language-dropdown">
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="ko">
+          
+          <img src="https://cdn.countryflags.com/thumbs/south-korea/flag-400.png" title="Korean">
+          
+        </a>
+      </li>
+    
+      <li>
+        <a href="#" class="lang-select" data-lang="en">
+          
+          <img src="https://cdn.countryflags.com/thumbs/united-states-of-america/flag-400.png" title="English">
+          
+        </a>
+      </li>
+    
+  </ul>
+</span>
+
+<script type="text/javascript">
+function googleTranslateElementInit() {
+  new google.translate.TranslateElement({
+    pageLanguage: 'ko',
+    autoDisplay: false,
+    layout: google.translate.TranslateElement.InlineLayout.VERTICAL
+  }, 'google_translate_element');
+
+  // Links to cross-origin destinations are unsafe
+  var gll = document.getElementsByClassName('goog-logo-link')[0];
+  if (gll) {
+    gll.setAttribute('rel', 'noopener');
+  }
+
+  function restoreLang() {
+    var iframe = document.getElementsByClassName('goog-te-banner-frame')[0];
+    if (!iframe) return;
+
+    var innerDoc = iframe.contentDocument || iframe.contentWindow.document;
+    var restore_el = innerDoc.getElementsByTagName("button");
+
+    for (var i = 0; i < restore_el.length; i++) {
+      if (restore_el[i].id.indexOf("restore") >= 0) {
+        restore_el[i].click();
+        var close_el = innerDoc.getElementsByClassName("goog-close-link");
+        close_el[0].click();
+        return;
+      }
+    }
+  }
+
+  function triggerHtmlEvent(element, eventName) {
+    var event;
+    if (document.createEvent) {
+      event = document.createEvent('HTMLEvents');
+      event.initEvent(eventName, true, true);
+      element.dispatchEvent(event);
+    } else {
+      event = document.createEventObject();
+      event.eventType = eventName;
+      element.fireEvent('on' + event.eventType, event);
+    }
+  }
+
+  var googleCombo = document.querySelector("select.goog-te-combo");
+  var langSelect = document.querySelector('.ct-language');
+  langSelect.addEventListener('click', function(event) {
+    if (!event.target) {
+      return;
+    }
+
+    var selected = document.querySelector('.ct-language .ct-language-selected');
+    if (selected) {
+      selected.classList.remove('ct-language-selected');
+    }
+
+    var target = event.target;
+    while (target && target !== langSelect ) {
+      if (target.matches('.lang-select')) {
+        break;
+      }
+      target = target.parentElement;
+    }
+
+    if (target && target.matches('.lang-select')) {
+      var lang = target.getAttribute('data-lang');
+      if (googleCombo.value == lang) {
+        restoreLang();
+      } else {
+        target.parentElement.classList.add('ct-language-selected');
+        googleCombo.value = lang;
+        triggerHtmlEvent(googleCombo, 'change');
+      }
+    }
+
+    event.preventDefault();
+  });
+}
+</script>
+
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</span>
+</div>
+      </nav>
+</div>
+  </div>
+</header>
+
+<script>
+  function initHeader() {
+    var lastScrollY = getScrollPos().y;
+    var documentElement = document.documentElement;
+
+    function storeScrollData() {
+      var y = getScrollPos().y;documentElement.setAttribute("data-header-transparent", "");var scrollStatus = "";
+
+      if (y <= 0) {
+        scrollStatus = "top";
+      } else if ((window.innerHeight + y) >= document.body.offsetHeight) {
+        scrollStatus = "bottom";
+      } else {
+        var isScrollDown = (y - lastScrollY > 0) ? true : false;
+        scrollStatus = isScrollDown ? "down" : "up";
+      }
+
+      lastScrollY = y;
+      documentElement.setAttribute("data-scroll-status", scrollStatus);
+    }
+
+    window.addEventListener('scroll', function(e) {
+      storeScrollData();
+    });
+
+    storeScrollData();
+  }
+  document.addEventListener('DOMContentLoaded', initHeader);
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+    html .page-banner {
+      background: rgba(0, 0, 0, 0.8);
+    }
+  </style>
+<style>html .page-banner {
+      height:  117.76px;
+      min-height: 320px;
+    }
+    html[data-scroll-status="top"] .page-banner {
+      height: 320px;
+    }
+  </style>
+<style>
+    html .page-banner .page-banner-img > *:first-child {
+      opacity: 0.8;
+    }
+
+    html[data-theme="dark"] .page-banner .page-banner-img > *:first-child {
+      opacity: 0.5744;
+    }
+  </style>
+<section class="page-banner">
+    <div class="page-banner-img">
+<div style="background-image: url(/jekyll-theme-yat/assets/images/banners/home.jpeg)"></div>
+        <img class="img-placeholder" src="/jekyll-theme-yat/assets/images/banners/home.jpeg">
+</div>
+    <div class="wrapper">
+      <div class="page-banner-inner">
+<header class="post-header">
+  <h1 class="post-title p-name" itemprop="name headline">
+    내 테스트 코드는 몇 점짜리? Jacoco를 통한 커버리지 관리
+  </h1>
+  <h2 class="post-subtitle">
+    Jacoco 코드 커버리지 측정 및 관리
+  </h2>
+
+  <p class="post-meta">
+    <time class="dt-published" datetime="2021-08-09T15:00:00+00:00" itemprop="datePublished"><i class="fa fa-calendar"></i> Aug 09, 2021
+    </time>
+
+     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <span class="post-reading-time left-vsplit"><i class="fa fa-clock-o"></i> About 16 mins</span>
+
+    
+    </p>
+<div style="margin-bottom: 15px;">작성자: 남권우</div>
+    
+
+
+    <!-- 
+    
+      
+    
+      
+    
+     -->
+  
+  <div class="post-tags">
+<a class="post-tag" href="/jekyll-theme-yat/tags.html#test">#test</a><a class="post-tag" href="/jekyll-theme-yat/tags.html#Jacoco">#Jacoco</a>
+</div></header>
+</div>
+    </div>
+  </section><script>
+  function hashLocate(hashValue) {
+    hashValue = hashValue.replace(/^.*#h-/, '');
+    hashValue = decodeURIComponent(hashValue);
+    var element = document.getElementById(hashValue);
+
+    if (!element) {
+      return;
+    }
+
+    var header = document.querySelector('header.site-header');
+    var headerRect = header.getBoundingClientRect();
+    var headerTop = Math.floor(headerRect.top);
+    var headerHeight = Math.floor(headerRect.height);
+    var scrollPos = getScrollPos();
+    var offsetY = element.offsetTop - (headerTop + headerHeight + 20);
+
+    if (offsetY == scrollPos.y) {
+      return;
+    }
+
+    if (headerTop == 0  && offsetY > scrollPos.y) {
+      offsetY += headerHeight + 2;
+    } else if (headerTop < 0  && offsetY < scrollPos.y) {
+      offsetY -= headerHeight - 2;
+    }
+
+    smoothScrollTo(offsetY);
+  }
+
+  // The first event occurred
+  window.addEventListener('load', function(event) {
+    if (window.location.hash) {
+      hashLocate(window.location.hash);
+    }
+  });
+
+  // The first event occurred
+  window.addEventListener('click', function(event) {
+    if (event.target.tagName.toLowerCase() == 'a') {
+      hashLocate(event.target.getAttribute('href'));
+    }
+  });
+</script>
+<div class="theme-toggle">
+  <input type="checkbox" id="theme-switch">
+  <label for="theme-switch">
+    <div class="toggle"></div>
+    <div class="names">
+      <p class="light">Light</p>
+      <p class="dark">Dark</p>
+    </div>
+  </label>
+</div>
+
+
+
+
+<script>
+  (function () {
+    var sw = document.getElementById('theme-switch');
+    var html = document.getElementsByTagName('html')[0];
+    var nightModeOption = ('auto' || 'auto').toLowerCase();
+    var storage = nightModeOption === 'manual' ? localStorage : sessionStorage;
+    var themeData = loadThemeData();
+
+    function saveThemeData(data) {
+      storage.setItem('theme', JSON.stringify(data));
+    }
+
+    function loadThemeData() {
+      var data = storage.getItem('theme');
+      try {
+        data = JSON.parse(data ? data : '');
+      } catch (e) {
+        data = { nightShift: undefined, autoToggleAt: 0 };
+        saveThemeData(data);
+      }
+      return data;
+    }
+
+    function handleThemeToggle(nightShift) {
+      themeData.nightShift = nightShift;
+      saveThemeData(themeData);
+      html.dataset.theme = nightShift ? 'dark' : 'light';
+      setTimeout(function () {
+        sw.checked = nightShift ? true : false;
+      }, 50);
+    }
+
+    function autoThemeToggle() {
+      // Next time point of theme toggle
+      var now = new Date();
+      var toggleAt = new Date();
+      var hours = now.getHours();
+      var nightShift = hours >= 19 || hours <= 7;
+
+      if (nightShift) {
+        if (hours > 7) {
+          toggleAt.setDate(toggleAt.getDate() + 1);
+        }
+        toggleAt.setHours(7);
+      } else {
+        toggleAt.setHours(19);
+      }
+
+      toggleAt.setMinutes(0);
+      toggleAt.setSeconds(0);
+      toggleAt.setMilliseconds(0);
+
+      var delay = toggleAt.getTime() - now.getTime();
+
+      // auto toggle theme mode
+      setTimeout(function () {
+        handleThemeToggle(!nightShift);
+      }, delay);
+
+      return {
+        nightShift: nightShift,
+        toggleAt: toggleAt.getTime(),
+      };
+    }
+
+    // Listen the theme toggle event
+    sw.addEventListener('change', function (event) {
+      handleThemeToggle(event.target.checked);
+    });
+
+    if (nightModeOption == 'auto') {
+      var data = autoThemeToggle();
+
+      // Toggle theme by local setting
+      if (data.toggleAt > themeData.autoToggleAt) {
+        themeData.autoToggleAt = data.toggleAt;
+        handleThemeToggle(data.nightShift);
+      } else {
+        handleThemeToggle(themeData.nightShift);
+      }
+    } else if (nightModeOption == 'manual') {
+      handleThemeToggle(themeData.nightShift);
+    } else {
+      var nightShift = themeData.nightShift;
+      if (nightShift === undefined) {
+        nightShift = nightModeOption === 'on';
+      }
+      handleThemeToggle(nightShift);
+    }
+  })();
+</script>
+<div id="click-to-top" class="click-to-top">
+  <i class="fa fa-arrow-up"></i>
+</div>
+<script>
+  (function () {
+    const clickToTop = document.getElementById('click-to-top');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 100) {
+        clickToTop.classList.add('show')
+      }else {
+        clickToTop.classList.remove('show')
+      }
+    });
+    clickToTop.addEventListener('click', () => {
+      window.smoothScrollTo(0);
+    });
+  })();
+</script>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <div class="framework">
+  <section class="main">
+
+     <div class="post">
+  <section>
+
+
+
+
+
+
+
+
+
+<article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+    <div class="post-content e-content" itemprop="articleBody">
+
+      <p>안녕하세요,
+저는 업브렐라에서 백엔드 개발을 담당하고 있습니다.
+업브렐라의 테스트 코드를 작성하면서 어떻게 하면 더 퀄리티 좋은 테스트 코드를 작성할 수 있을지에 대해 고민했습니다.</p>
+
+<p>토스 팀의 <a href="https://www.youtube.com/watch?v=jdlBu2vFv58">이응준님의 코드 커버리지 100% 달성하기</a> 영상을 보면서 많은 영감을 얻을 수 있었습니다.
+다음은, 영상에 나오는 로버트 마틴의 클린 코더(2016) 책 속 인용구인데요.
+저도 이 책을 읽어보지는 못했지만 커버리지의 중요성에 대해 많은 생각을 하게 되었습니다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>얼마만큼의 코드를 자동화한 단위 테스트로 커버해야할까?
+대답할 필요조차 없다. 모조리 다 해야 한다. 모조리!
+
+100% 테스트 커버리지를 권장하냐고? 권장이 아니라 강력히 요구한다.
+작성한 코드는 한 줄도 빠짐없이 전부 테스트해야 한다.
+군말은 필요 없다.
+</code></pre></div></div>
+
+<p>위 영상처럼 100%에 도달하면 좋겠지만, 현실적으로는 불가능한 일이라고 생각하여, 100%를 추구하는 테스트 코드 작성을 하는 것을 팀 내부의 목표로 잡았습니다.</p>
+
+<p>저희 팀도 Jacoco를 도입하면서 코드 커버리지 측정 및 관리를 시작하였고,
+처음 코드 커버리지 측정을 했을 때 불과 50%대에 불과하던 커버리지율을 지금 이 글을 쓰는 순간에는 80% 이상으로 관리하고 있습니다.
+최종적으로, 현재는 70% 이상의 테스트 커버리지를 유지하지 못하면 빌드 실패되도록 설정하였습니다.</p>
+
+<p>업브렐라 팀이 왜 테스트 커버리지를 높게 유지하고자 했는지 소개하고자 합니다.</p>
+
+<h2 id="1-문제-정의">1. 문제 정의</h2>
+
+<p>팀원들과 프로젝트를 진행하며 공통적으로 테스트 커버리지를 측정하는 도구의 필요성을 느꼈던 순간들이 있습니다.</p>
+
+<ul>
+  <li>
+    <p><strong>구현한 기능에 대해 바로바로 테스트 코드를 PR하지 못할때가 많다.</strong>
+나중에 테스트 코드를 작성하려 하지만, 어느 부분이 작성하지 않은 부분인지 일일히 확인하는 불편함이 있었습니다.</p>
+  </li>
+  <li>
+    <p><strong>테스트 코드를 작성하지만, 테스트 코드가 불안정하다.</strong>
+작성한 테스트코드가 어느 범위까지 커버되는지 확신할 수 없었습니다.</p>
+  </li>
+  <li>
+    <p><strong>테스트 코드가 완전하지 못하기 때문에 프로덕션 코드를 수정했을 때 영향에 대해 많이 고민해야한다.</strong>
+즉, 자신있게 배포를 할 수 없게 됩니다.</p>
+  </li>
+  <li>
+    <p><strong>불필요한 프로덕션 코드가 많아진다.</strong>
+반대로, 커버리지율을 높게 유지하게 된다면 불필요한 코드를 삭제하는게 유지보수가 편하다는 걸 깨닫게 되었습니다.</p>
+  </li>
+</ul>
+
+<h2 id="2-커버리지-관리-도구-jacoco">2. 커버리지 관리 도구, Jacoco</h2>
+
+<h3 id="21-코드-커버리지란">2.1. 코드 커버리지란?</h3>
+<p>코드 커버리지란, 테스트 코드가 프로덕션 코드를 커버하는 비율을 의미합니다.
+즉, 테스트 코드가 실제 프로덕션 코드를 검증하는 비율을 의미하는데요, 이를 통해 작성된 테스트의 수가 충분한지, 혹은 적절한지 논의할 수 있습니다.</p>
+
+<p>코드 커버리지의 측정 기준에는 여러 가지가 있습니다.</p>
+<ul>
+  <li>클래스 커버리지 : 클래스가 실행되었다면 커버된 것으로 간주</li>
+  <li>메서드 커버리지 : 메서드가 실행되었다면 커버된 것으로 간주</li>
+  <li>라인 커버리지 : 코드의 한 라인이 실행되었다면 커버된 것으로 간주</li>
+  <li>인스트럭션 커버리지 : Instruction 단위 측정</li>
+  <li>브랜치 커버리지 : if, switch문의 분기를 커버하는 비율</li>
+</ul>
+
+<p>그렇지만 코드 커버리지가 높다고 해서 꼭 모든 로직이 잘 테스트되고 있음을 보장하는 것은 아닙니다.
+예를 들어, 아래와 같은 코드가 있다고 가정해봅시다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">Calculator</span> <span class="o">{</span>
+    <span class="kd">public</span> <span class="kt">int</span> <span class="nf">multiply</span><span class="o">(</span><span class="kt">int</span> <span class="n">a</span><span class="o">,</span> <span class="kt">int</span> <span class="n">b</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>위 코드는 아래와 같이 테스트 코드를 작성할 수 있습니다.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">CalculatorTest</span> <span class="o">{</span>
+    <span class="nd">@Test</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">add</span><span class="o">()</span> <span class="o">{</span>
+        <span class="nc">Calculator</span> <span class="n">calculator</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Calculator</span><span class="o">();</span>
+        <span class="kt">int</span> <span class="n">result</span> <span class="o">=</span> <span class="n">calculator</span><span class="o">.</span><span class="na">multiply</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="mi">1</span><span class="o">);</span>
+        <span class="n">assertEquals</span><span class="o">(</span><span class="mi">1</span><span class="o">,</span> <span class="n">result</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+<p>위 테스트 코드는 통과할 것이고, 커버리지 100%를 달성하겠지만, 위 코드에서 <code class="language-plaintext highlighter-rouge">a * b</code>를 <code class="language-plaintext highlighter-rouge">a ** b</code>로 변경해도 여전히 동작할 것입니다.
+그러나 테스트에 대입되는 변수를 다양하게 작성했더라면 <code class="language-plaintext highlighter-rouge">*</code>를 <code class="language-plaintext highlighter-rouge">**</code>로 변경했을 때 테스트는 통과하지 못했을 것입니다.</p>
+
+<p>즉, 높은 커버리지 비율을 유지하는 것과는 별도로 <strong>좋은 테스트 코드를 작성</strong>하는 것이 중요합니다.</p>
+
+<h3 id="22-jacoco-시작하기">2.2. Jacoco 시작하기</h3>
+
+<p>Jacoco는 코드 커버리지 측정 및 관리를 도와주는 도구입니다.
+Jacoco를 사용하면, 테스트 코드가 얼마나 많은 코드를 커버하는지를 측정할 수 있습니다.</p>
+
+<h4 id="buildgradle-설정">build.gradle 설정</h4>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>plugins {
+    id 'jacoco'
+}
+
+jacoco {
+    toolVersion = "0.8.5"
+}
+</code></pre></div></div>
+
+<p>build.gradle에 의존성을 추가해줍니다.</p>
+
+<h3 id="23-jacoco-설정">2.3. Jacoco 설정</h3>
+
+<p>jacoco에서 테스트 리포트를 작성하기 위해서는 <code class="language-plaintext highlighter-rouge">jacocoTestReport</code>라는 Task를 동작시켜야합니다.</p>
+
+<p>그렇지만 <code class="language-plaintext highlighter-rouge">jacocoTestReport</code>를 위해서는 gradle의 <code class="language-plaintext highlighter-rouge">Test</code> 태스크가 선행되어야 합니다.
+따라서 <code class="language-plaintext highlighter-rouge">Test</code> 태스크를 동작시키면 <code class="language-plaintext highlighter-rouge">jacocoTestReport</code>가 자동으로 동작하도록 설정해줍니다.</p>
+
+<div class="language-groovy highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">test</span> <span class="o">{</span>
+    <span class="n">finalizedBy</span> <span class="n">jacocoTestReport</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>그리고 아래처럼 TestReport를 설정해줍니다.
+업브렐라는 QueryDSL을 통해서 복잡한 쿼리, 동적 쿼리를 생성하고 있습니다.
+QueryDSL을 사용하면, Q도메인이라는 클래스가 생성되는데요, 이 클래스는 테스트 코드에서는 사용되지 않습니다.
+따라서 Q도메인을 제외하고 커버리지를 측정하도록 설정해줍니다.</p>
+
+<div class="language-groovy highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">jacocoTestReport</span> <span class="o">{</span>
+    <span class="n">reports</span> <span class="o">{</span>
+        <span class="c1">// 원하는 리포트를 켜고 끌 수 있습니다.</span>
+        <span class="n">html</span><span class="o">.</span><span class="na">required</span><span class="o">.</span><span class="na">set</span><span class="o">(</span><span class="kc">true</span><span class="o">)</span>
+        <span class="n">xml</span><span class="o">.</span><span class="na">required</span><span class="o">.</span><span class="na">set</span><span class="o">(</span><span class="kc">false</span><span class="o">)</span>
+        <span class="n">csv</span><span class="o">.</span><span class="na">required</span><span class="o">.</span><span class="na">set</span><span class="o">(</span><span class="kc">false</span><span class="o">)</span>
+    <span class="o">}</span>
+
+    <span class="c1">// QueryDSL을 사용하는 경우, QueryDSL의 Q도메인을 제외해줍니다.</span>
+    <span class="kt">def</span> <span class="n">Qdomains</span> <span class="o">=</span> <span class="o">[]</span>
+    <span class="k">for</span><span class="o">(</span><span class="n">qPattern</span> <span class="k">in</span> <span class="s2">"**/QA"</span> <span class="o">..</span> <span class="s2">"**/QZ"</span><span class="o">){</span>
+        <span class="n">Qdomains</span><span class="o">.</span><span class="na">add</span><span class="o">(</span><span class="n">qPattern</span><span class="o">+</span><span class="s2">"*"</span><span class="o">)</span>
+    <span class="o">}</span>
+
+  <span class="c1">// classDirectories에 Qdomains를 제외한 모든 클래스를 추가해줍니다.</span>
+    <span class="n">afterEvaluate</span> <span class="o">{</span>
+        <span class="n">classDirectories</span><span class="o">.</span><span class="na">setFrom</span><span class="o">(</span><span class="n">files</span><span class="o">(</span><span class="n">classDirectories</span><span class="o">.</span><span class="na">files</span><span class="o">.</span><span class="na">collect</span> <span class="o">{</span>
+            <span class="n">fileTree</span><span class="o">(</span><span class="nl">dir:</span> <span class="n">it</span><span class="o">,</span>
+                    <span class="nl">exclude:</span> <span class="o">[]</span> <span class="o">+</span> <span class="n">Qdomains</span><span class="o">)</span>
+        <span class="o">}))</span>
+    <span class="o">}</span>
+
+
+    <span class="c1">// jacocoTestCoverageVerification을 실행시킵니다.</span>
+    <span class="n">finalizedBy</span> <span class="s1">'jacocoTestCoverageVerification'</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>이어서 실행된 <code class="language-plaintext highlighter-rouge">jacocoTestCoverageVerification</code>의 설정을 해줍니다.
+<code class="language-plaintext highlighter-rouge">jacocoTestCoverageVerification</code>으로 jacoco의 커버리지 검사 조건과 위반 시 빌드를 실패시키게 설정할 수 있습니다.</p>
+
+<div class="language-groovy highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">jacocoTestCoverageVerification</span> <span class="o">{</span>
+  <span class="n">violationRules</span> <span class="o">{</span>
+    <span class="n">rule</span> <span class="o">{</span>
+      <span class="n">element</span> <span class="o">=</span> <span class="s1">'CLASS'</span>
+      <span class="c1">// (1) 측정 단위</span>
+
+      <span class="n">limit</span> <span class="o">{</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="s1">'LINE'</span>
+        <span class="c1">// (2) 커버리지 측정 방식 - LINE, BRANCH, INSTRUCTION, METHOD, CLASS</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="s1">'COVEREDRATIO'</span>
+        <span class="c1">// 커버된 비율로 표시</span>
+        <span class="n">minimum</span> <span class="o">=</span> <span class="mf">0.7</span>
+        <span class="c1">// (3) 최소 커버리지 비율 설정, 70%</span>
+      <span class="o">}</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+</code></pre></div></div>
+<p>이 설정에서 커버리지 측정 방식과 최소 커버리지 비율을 설정할 수 있습니다.</p>
+
+<h4 id="1-측정-단위">(1) 측정 단위</h4>
+<ul>
+  <li>BUNDLE (default): 패키지 번들</li>
+  <li>PACKAGE: 패키지</li>
+  <li>CLASS: 클래스</li>
+  <li>SOURCEFILE: 소스파일</li>
+  <li>METHOD: 메소드</li>
+</ul>
+
+<p>element는 커버리지 체크 기준으로, CLASS를 선택하면 클래스 단위로 커버리지를 체크하게 됩니다.
+테스트 리포트에도 마찬가지로 클래스 단위로 리포트가 작성됩니다.</p>
+
+<h4 id="2-커버리지-측정-방식">(2) 커버리지 측정 방식</h4>
+<ul>
+  <li>LINE: 빈 줄을 제외한 실제 코드의 라인 수</li>
+  <li>BRANCH: 조건문 등의 분기 수</li>
+  <li>CLASS: 클래스 수</li>
+  <li>METHOD: 메소드 수</li>
+  <li>INSTRUCTION (default): Java 바이트코드 명령 수. Java bytecode instruction listings</li>
+</ul>
+
+<p>counter에서는 비율을 계산하기 위한 단위를 선택할 수 있습니다. 업브렐라 팀은 counter로 LINE을 설정했습니다.</p>
+
+<p>여기까지 설정하면 <code class="language-plaintext highlighter-rouge">QDomain</code>을 제외한 코드 커버리지를 잘 측정해줍니다.
+그렇지만 <code class="language-plaintext highlighter-rouge">lombok</code>으로 생성된 builder, getter 메서드에 대한 커버리지 측정이 필요없다고 생각하여 제외하는 옵션을 추가했습니다.</p>
+
+<p><code class="language-plaintext highlighter-rouge">lombok.config</code>에 아래 옵션을 추가해주면 됩니다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>lombok.addLombokGeneratedAnnotation = true
+</code></pre></div></div>
+
+<h3 id="24-jacoco-리포트-확인하기">2.4. Jacoco 리포트 확인하기</h3>
+
+<p>이제 테스트를 실행하고, 리포트를 확인해보겠습니다.
+<code class="language-plaintext highlighter-rouge">Test</code> 태스크를 실행시키면, 커버리지 최소 비율을 확인하고, 그 이상이라면 <code class="language-plaintext highlighter-rouge">build/report/jacoco/index.html</code>에 리포트를 작성합니다.
+경로 변경도 물론 옵션에서 가능합니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-10-01.png" alt="absolute"></p>
+
+<p>위 이미지는 업브렐라의 커버리지 리포트 예시입니다. 업브렐라 백엔드의 현재 프로덕션 코드는 4000 라인, 테스트 코드는 6000 라인입니다.</p>
+
+<p>커버리지 리포트에서 클래스, 메서드를 클릭하여 메서드 별 커버리지와 실제 커버되지 않는 프로덕션 코드를 아래처럼 확인할 수 있습니다.</p>
+
+<p><img data-action="zoom" src="/jekyll-theme-yat/resources/2023-08-10-02.png" alt="absolute"></p>
+
+<p>코드 커버리지 툴을 사용하니 좋았던 점은, <strong>테스트에서 커버되지 않는 코드를 바로 확인할 수 있다</strong>는 점입니다.
+작성을 깜빡했거나, 분기처리에 대한 경우의 수를 고려하지 못한 경우 커버리지 리포트에서 쉽게 확인하여 더 나은 테스트 코드를 작성할 수 있도록 도와줍니다.
+커버리지 높은 테스트가 만능은 아니지만, 테스트 코드의 퀄리티를 향상시켜주는 것은 자명한 사실이라고 생각됩니다.</p>
+
+
+
+    </div>
+
+</article>
+<div class="post-nav">
+<a class="previous" href="/jekyll-theme-yat/test/2021/08/08/introduction-of-fixture-monkey.html" title="테스트 코드 작성 반복 노동으로부터 해방, Fixture Monkey">테스트 코드 작성 반복 노동으로부터 해방,...</a><a class="next" href="/jekyll-theme-yat/login/2021/08/15/introduction-of-session-server.html" title="분산 서버 환경에서 세션 로그인">분산 서버 환경에서 세션 로그인</a>
+</div>
+<div class="post-related">
+      <div>Related Articles</div>
+      <ul>
+        <li>
+          <a class="post-link" href="/jekyll-theme-yat/infrastructure/2021/08/30/nginx-reverse-proxy.html" title="분산 서버 환경에서 세션 로그인">nginx 리버스 프록시 설정</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/redis/2023/09/24/db-cache.html" title="분산 서버 환경에서 세션 로그인">캐시를 통한 성능 최적화</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/infrastructure/2021/08/19/CI-CD-with-ECS-ECR.html" title="분산 서버 환경에서 세션 로그인">롤링 업데이트, AWS ECR, ECS로 쉽게</a>
+        </li>
+<li>
+          <a class="post-link" href="/jekyll-theme-yat/mysql/2023/09/13/data-bulk-insert.html" title="분산 서버 환경에서 세션 로그인">대용량 데이터 삽입</a>
+        </li>
+</ul>
+    </div>
+<div class="post-comments"></div></section>
+</div>
+
+<!-- Utterances 댓글 스니핏 -->
+<script src="https://utteranc.es/client.js" repo="UPbrella/UPbrella.github.io" issue-term="pathname" theme="github-light" crossorigin="anonymous" async></script>
+
+
+  </section>
+  <section class="sidebar" style="margin-left: 15px;">
+    <!-- Get sidebar items --><style type="text/css" media="screen">
+.post-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+</style>
+
+<div class="post-menu">
+  <div class="post-menu-title">TOC</div>
+  <div class="post-menu-content"></div>
+</div>
+
+<script>
+  function generateContent() {
+    var menu = document.querySelector(".post-menu");
+    var menuContent =  menu.querySelector(".post-menu-content");
+    var headings = document.querySelector(".post-content").querySelectorAll("h2, h3, h4, h5, h6");
+
+    // Hide menu when no headings
+    if (headings.length === 0) {
+      return menu.style.display = "none";
+    }
+
+    // Generate post menu
+    var menuHTML = '';
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      menuHTML += (
+        '<li class="h-' + h.tagName.toLowerCase() + '">'
+        + '<a href="#h-' + h.getAttribute('id') + '">' + h.textContent + '</a></li>');
+    }
+
+    menuContent.innerHTML = '<ul>' + menuHTML + '</ul>';
+
+    // The header element
+    var header = document.querySelector('header.site-header');
+
+    function doMenuCollapse(index, over_items) {
+      var items = menuContent.firstChild.children;
+
+      if (over_items == undefined) {
+        over_items = 20;
+      }
+
+      if (items.length < over_items) {
+        return;
+      }
+
+      var activeItem = items[index];
+      var beginItem = activeItem
+      var endItem = activeItem
+      var beginIndex = index;
+      var endIndex = index + 1;
+      while (beginIndex >= 0
+        && !items[beginIndex].classList.contains('h-h2')) {
+        beginIndex -= 1;
+      }
+      while (endIndex < items.length
+        && !items[endIndex].classList.contains('h-h2')) {
+        endIndex += 1;
+      }
+      for (var i = 0; i < beginIndex; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+      for (var i = beginIndex + 1; i < endIndex; i++) {
+        item = items[i]
+        // if (!item.classList.contains('h-h2')) {
+          item.style.display = '';
+        // }
+      }
+      for (var i = endIndex; i < items.length; i++) {
+        item = items[i]
+        if (!item.classList.contains('h-h2')) {
+          item.style.display = 'none';
+        }
+      }
+    }
+
+    // Init menu collapsed
+    doMenuCollapse(-1);
+
+    // Active the menu item
+    window.addEventListener('scroll', function (event) {
+      var lastActive = menuContent.querySelector('.active');
+      var changed = true;
+      var activeIndex = -1;
+      for (var i = headings.length - 1; i >= 0; i--) {
+        var h = headings[i];
+        var headingRect = h.getBoundingClientRect();
+        var headerRect = header.getBoundingClientRect();
+        var headerTop = Math.floor(headerRect.top);
+        var headerHeight = Math.floor(headerRect.height);
+        var headerHeight = headerTop + headerHeight + 20;
+        if (headingRect.top <= headerHeight) {
+          var id = 'h-' + h.getAttribute('id');
+          var a = menuContent.querySelector('a[href="#' + id  + '"]');
+          var curActive = a.parentNode;
+          if (curActive) {
+            curActive.classList.add('active');
+            activeIndex = i;
+          }
+          if (lastActive == curActive) {
+            changed = false;
+          }
+          break;
+        }
+      }
+      if (changed) {
+        if (lastActive) {
+          lastActive.classList.remove('active');
+        }
+        doMenuCollapse(activeIndex);
+      }
+      event.preventDefault();
+    });
+  }
+  generateContent();
+</script>
+</section>
+</div>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/jekyll-theme-yat/"></data>
+
+  <div class="wrapper">
+    <div class="site-footer-inner">
+<div></div>
+      <div>Contact <a title="Upbrella Github Repository" href="https://github.com/UPbrella">GitHub</a> &amp; <a>WebSite</a> </div>
+      <!-- <div>Powered by <a title="Jekyll is a simple, blog-aware, static site
+      generator." href="https://jekyllrb.com/">Jekyll</a> &amp; <a title="Yat, yet
+      another theme." href="https://github.com/jeffreytse/jekyll-theme-yat">Yat Theme</a>.</div>
+      <div class="footer-col rss-subscribe">Subscribe <a href="/jekyll-theme-yat/feed.xml">via RSS</a></div> -->
+    </div>
+  </div>
+</footer>
+</body>
+</html>
